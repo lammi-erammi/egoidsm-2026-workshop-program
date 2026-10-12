@@ -457,16 +457,37 @@ function buildPoster() {
   $('#pLimit').onchange = e => { S.posterLimit = +e.target.value; updatePoster(); };
   $('#pPrint').onclick = () => {
     $('#poster-print').innerHTML = posterHtml(S.posterTeam);
+    // PDF로 저장할 때 파일 이름이 페이지 제목을 따라간다 → 경영팀_프로그램_그로스팀.pdf
+    const title = document.title;
+    document.title = `경영팀_프로그램_${(teamOf(S.posterTeam)?.name || '').replace(/[\\/:*?"<>|\s]+/g, '')}`;
+    window.addEventListener('afterprint', () => { document.title = title; }, { once: true });
     window.print();
   };
   updatePoster();
+  document.fonts?.ready.then(updatePoster);
 }
 
 function updatePoster() {
   const box = $('#pScale');
   if (!box) return;
   box.innerHTML = posterHtml(S.posterTeam);
+  fitStickies(box.firstElementChild);
   fitPoster();
+}
+
+// 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
+const STICKY_MAX = 66, STICKY_MIN = 24;
+function fitStickies(poster) {
+  const cols = poster ? [...poster.querySelectorAll('.p-col')] : [];
+  if (!cols.length) return;
+  const fits = () => cols.every(c => c.scrollHeight <= c.clientHeight + 1);
+  let size = STICKY_MAX;
+  poster.style.setProperty('--sticky', size + 'pt');
+  while (size > STICKY_MIN && !fits()) {
+    size -= 2;
+    poster.style.setProperty('--sticky', size + 'pt');
+  }
+  S.posterFont = size;
 }
 
 function fitPoster() {
@@ -489,7 +510,7 @@ function posterHtml(teamId) {
   const members = listOf(d.members).sort((a, b) => a.ts - b.ts);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   return `
-    <div class="poster">
+    <div class="poster" style="--sticky:${S.posterFont || STICKY_MAX}pt">
       <div class="p-top"><span>${esc(EVENT.title)} · ${esc(EVENT.program)}</span><span>${esc(EVENT.date)}</span></div>
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>우리 이렇게 일하자</h1>
       <div class="p-missions">

@@ -177,7 +177,7 @@ main { padding: 24px; max-width: 1480px; margin: 0 auto; }
 .tcol { display: flex; flex-direction: column; gap: 6px; }
 .row-btns { display: flex; gap: 8px; }
 .mcard p.mid { font-size: 16px; font-weight: 500; }
-.p-m p.mid { font-size: 23pt; font-weight: 500; }
+.p-m p.mid { font-size: 30pt; font-weight: 500; }
 .trow input, .trow textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: #fff; font-family: var(--sans); font-size: 14px; }
 .ed-actions { display: flex; justify-content: flex-end; }
 .ed-actions .btn { width: auto; }
@@ -206,30 +206,31 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 
 /* ── A1 전지 (594 × 841mm) ── */
 .poster { width: 594mm; height: 841mm; background: #fffdf8; color: var(--ink); padding: 34mm 36mm 28mm; display: flex; flex-direction: column; gap: 14mm; font-family: var(--sans); overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.p-top { display: flex; justify-content: space-between; font-size: 22pt; color: var(--ink-3); font-weight: 500; border-bottom: 1.2mm solid var(--ink); padding-bottom: 6mm; }
+.p-top { display: flex; justify-content: space-between; font-size: 30pt; color: var(--ink-2); font-weight: 700; border-bottom: 1.2mm solid var(--ink); padding-bottom: 6mm; }
 .p-title { font-size: 110pt; font-weight: 900; letter-spacing: -3pt; line-height: 1.02; }
-.p-team { display: block; font-size: 50pt; color: var(--accent); letter-spacing: -1pt; margin-bottom: 4mm; }
+.p-team { display: block; font-size: 56pt; color: var(--accent); letter-spacing: -1pt; margin-bottom: 4mm; }
 .p-missions { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
 .p-m { border: 1mm solid var(--ink); border-radius: 6mm; padding: 9mm 11mm; }
 .p-m:nth-child(2) { border-color: var(--accent); }
-.p-m b { display: block; font-size: 17pt; color: var(--ink-3); margin-bottom: 2mm; }
-.p-m p { font-size: 30pt; font-weight: 700; line-height: 1.3; letter-spacing: -.5pt; margin-bottom: 4mm; }
-.p-m p.sm { font-size: 19pt; font-weight: 500; }
-.p-agree { list-style: none; margin: 0; padding: 4mm 0; display: flex; flex-direction: column; justify-content: center; gap: 9mm; flex: 1; min-height: 0; }
+.p-m b { display: block; font-size: 24pt; color: var(--ink-2); margin-bottom: 2mm; }
+.p-m p { font-size: 36pt; font-weight: 700; line-height: 1.3; letter-spacing: -.5pt; margin-bottom: 5mm; }
+.p-m p.sm { font-size: 27pt; font-weight: 500; }
+.p-agree { list-style: none; margin: 0; padding: 2mm 0; display: flex; flex-direction: column; gap: 9mm; flex: none; }
 .p-agree li { display: flex; align-items: center; gap: 9mm; font-family: var(--hand); font-size: 96pt; line-height: 1.05; word-break: keep-all; }
 .p-agree li.empty { font-family: var(--sans); font-size: 24pt; color: var(--ink-3); }
 .p-n { flex: none; width: 24mm; height: 24mm; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-family: var(--sans); font-weight: 900; font-size: 40pt; }
-.p-notes { flex: none; max-height: 340mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9mm; border-top: .6mm dashed var(--ink-3); padding-top: 10mm; overflow: hidden; }
-.p-spacer { display: none; }
+/* 포스트잇 칸은 남는 높이를 모두 쓰고, 글씨 크기(--sticky)는 app.js 가 칸에 맞춰 최대한 크게 정한다 */
+.p-notes { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9mm; border-top: .6mm dashed var(--ink-3); padding-top: 9mm; overflow: hidden; }
+.p-spacer { flex: 1; }
 .p-col { display: flex; flex-direction: column; gap: 5mm; min-height: 0; overflow: hidden; }
-.p-q { font-size: 17pt; font-weight: 700; line-height: 1.35; display: flex; gap: 3mm; }
-.p-q span { flex: none; width: 10mm; height: 10mm; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 13pt; }
-.p-stickies { display: flex; flex-wrap: wrap; gap: 4mm; align-content: flex-start; }
-.p-sticky { width: calc(50% - 2mm); padding: 5mm 6mm; font-family: var(--hand); font-size: 30pt; line-height: 1.1; border-radius: 1mm 1mm 1mm 5mm; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12); }
+.p-q { font-size: 26pt; font-weight: 700; line-height: 1.3; display: flex; gap: 4mm; }
+.p-q span { flex: none; width: 14mm; height: 14mm; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 20pt; }
+.p-stickies { display: flex; flex-direction: column; gap: 4mm; }
+.p-sticky { padding: 4mm 7mm; font-family: var(--hand); font-size: var(--sticky, 44pt); line-height: 1.08; border-radius: 1mm 1mm 1mm 6mm; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12); }
 .p-sticky.q1 { background: var(--q1); } .p-sticky.q2 { background: var(--q2); } .p-sticky.q3 { background: var(--q3); }
-.p-sign { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2mm 8mm; border-top: 1.2mm solid var(--ink); padding-top: 6mm; }
-.p-sign b { font-size: 18pt; color: var(--ink-3); margin-right: 4mm; }
-.p-sign span { font-family: var(--hand); font-size: 40pt; }
+.p-sign { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2mm 9mm; border-top: 1.2mm solid var(--ink); padding-top: 6mm; }
+.p-sign b { font-size: 26pt; color: var(--ink-2); margin-right: 4mm; }
+.p-sign span { font-family: var(--hand); font-size: 50pt; }
 
 @media print {
   @page { size: 594mm 841mm; margin: 0; }
