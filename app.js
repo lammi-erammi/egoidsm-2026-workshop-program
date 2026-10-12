@@ -81,7 +81,7 @@ async function main() {
   store.onConnection(v => { S.online = v; renderHeader(); if (v) announce(); });
   store.on('meta', v => { S.meta = v; if (!v && PREVIEW) seedPreview(); render(); }, denied);
   store.on('teams', v => { S.teams = v || {}; render(); }, denied);
-  store.on('presence', v => { S.presence = v || {}; renderHeader(); render(); }, denied);
+  store.on('presence', v => { S.presence = v || {}; renderHeader(); render(); renderJoinOverlay(); }, denied);
   store.on('stage', v => { S.stage = v; renderHeader(); markFocus(); }, denied);
   setInterval(tick, 1000);
 }
@@ -220,6 +220,7 @@ function renderHeader() {
       <button class="btn sm" data-act="stage-pause">${S.stage?.pausedLeft != null ? '다시 시작' : '멈춤'}</button>
       <button class="btn sm ghost" data-act="stage-reset">타이머 끄기</button>
       <span class="sep"></span>
+      <button class="btn sm" data-act="join-qr">접속 QR 띄우기</button>
       <button class="btn sm" data-act="copy-link">참가자 링크 복사</button>
       <button class="btn sm" data-act="backup">백업 받기</button>
     </div>` : ''}`;
@@ -241,10 +242,79 @@ function tick() {
   el.className = 'timer' + (over ? ' over' : left < 60000 ? ' soon' : '') + (st.pausedLeft != null ? ' paused' : '');
 }
 
+// 지금 단계의 칸을 강조하고, 나머지 칸은 살짝 흐리게 한다
 function markFocus() {
   const focus = AGENDA[S.stage?.step]?.focus;
-  document.querySelectorAll('[data-focus]').forEach(el => el.classList.toggle('focus', el.dataset.focus === focus));
+  let any = false;
+  document.querySelectorAll('[data-focus]').forEach(el => {
+    const on = !!focus && el.dataset.focus === focus;
+    el.classList.toggle('focus', on);
+    any ||= on;
+  });
+  document.body.classList.toggle('has-focus', any);
 }
+
+// ── 접속 안내 화면 (진행자): 참가자 링크 QR + 지금 접속한 인원 ──
+const QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+const participantLink = () => `${location.origin}${location.pathname}#k=${CODE}`;
+
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = QR_LIB;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function openJoinOverlay() {
+  let ov = $('#joinOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'joinOverlay';
+    ov.className = 'join-overlay';
+    ov.innerHTML = `
+      <div class="jo-card">
+        <button class="jo-close" data-act="join-qr-close" title="닫기 (Esc)">✕</button>
+        <p class="eyebrow">${esc(EVENT.title)} · ${esc(EVENT.program)}</p>
+        <h1>노트북으로 들어와 주세요</h1>
+        <div class="jo-body">
+          <div class="jo-qr" id="joQr">QR 만드는 중…</div>
+          <div class="jo-side">
+            <div class="jo-total"><span>지금 접속</span><b id="joTotal">0</b><span>명</span></div>
+            <ol class="jo-steps"><li>카메라로 QR을 찍거나 링크를 열어요</li><li>이름을 적고 우리 팀을 골라요</li><li>위쪽 이름 옆 초록 점이 보이면 끝!</li></ol>
+            <div class="jo-teams" id="joTeams"></div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+  }
+  ov.hidden = false;
+  renderJoinOverlay();
+  try {
+    await loadQrLib();
+    const qr = window.qrcode(0, 'M');
+    qr.addData(participantLink());
+    qr.make();
+    $('#joQr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+  } catch {
+    $('#joQr').textContent = 'QR을 만들지 못했어요. 인터넷 연결을 확인해 주세요';
+  }
+}
+
+function renderJoinOverlay() {
+  const ov = $('#joinOverlay');
+  if (!ov || ov.hidden || !S.meta) return;
+  const counts = teamList().map(t => ({ name: t.name, n: listOf(S.presence[t.id]).length }));
+  $('#joTotal').textContent = counts.reduce((sum, c) => sum + c.n, 0);
+  $('#joTeams').innerHTML = counts.map(c => `<span class="${c.n ? 'on' : ''}">${esc(c.name)} <b>${c.n}</b></span>`).join('');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#joinOverlay') && !$('#joinOverlay').hidden) $('#joinOverlay').hidden = true;
+});
 
 // ── 들어가기 (이름·팀 고르기) ───────────────────────────────
 function buildJoin() {
@@ -915,7 +985,14 @@ document.addEventListener('click', async e => {
     }
 
     // 진행자 타이머
-    case 'stage': return startStep(+el.dataset.step);
+    case 'stage': {
+      const step = +el.dataset.step;
+      startStep(step);
+      if (step === 0) openJoinOverlay(); // 접속·안내 단계: QR을 화면 가운데에 크게
+      return;
+    }
+    case 'join-qr': return openJoinOverlay();
+    case 'join-qr-close': $('#joinOverlay').hidden = true; return;
     case 'stage-prev': return startStep(Math.max(0, (S.stage?.step ?? 1) - 1));
     case 'stage-next': return startStep(Math.min(AGENDA.length - 1, (S.stage?.step ?? -1) + 1));
     case 'stage-plus': {
@@ -932,7 +1009,7 @@ document.addEventListener('click', async e => {
     }
     case 'stage-reset': return save(store.remove('stage'));
     case 'copy-link': {
-      const link = `${location.origin}${location.pathname}#k=${CODE}`;
+      const link = participantLink();
       try { await navigator.clipboard.writeText(link); toast('참가자 링크를 복사했어요'); }
       catch { prompt('이 링크를 복사해 주세요', link); }
       return;
