@@ -108,7 +108,7 @@ function glyphOps(path) {
   return out.join('\n');
 }
 
-// posterEl: 크기를 줄이지 않은(594×841mm 그대로) 전지 요소
+// posterEl: 크기를 줄이지 않은(596×842mm 그대로) 전지 요소
 export async function outlinePdf(posterEl, onStep = () => {}) {
   onStep('글꼴 받는 중… (처음 한 번은 10초쯤)');
   const fonts = await loadFonts();
@@ -232,7 +232,9 @@ async function buildPdf(content, wPt, hPt) {
   push('%PDF-1.4\n%âãÏÓ\n');
   obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
   obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(wPt)} ${n(hPt)}] /Resources << >> /Contents 4 0 R >>`);
+  // 인쇄소 가이드 파일처럼 모든 페이지 박스를 작업 크기(재단 여백 포함)로 같게 둔다
+  const box = `[0 0 ${n(wPt)} ${n(hPt)}]`;
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox ${box} /CropBox ${box} /TrimBox ${box} /BleedBox ${box} /ArtBox ${box} /Resources << >> /Contents 4 0 R >>`);
   offsets[4] = length;
   push(`4 0 obj\n<< /Length ${body.length} ${filter}>>\nstream\n`);
   push(body);

@@ -484,7 +484,7 @@ function buildPoster() {
         <label>칸마다 <select id="pLimit">${[4, 6, 8, 10, 14, 99].map(n => `<option value="${n}" ${n === S.posterLimit ? 'selected' : ''}>${n === 99 ? '전부' : n + '장'}</option>`).join('')}</select></label>
         <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
         <button class="btn" id="pPrint">인쇄 창으로 보기</button>
-        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1(594×841mm) 파일이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 공감(♥)이 많은 포스트잇부터 들어가요.</p>
+        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 공감(♥)이 많은 포스트잇부터 들어가요.</p>
       </div>
       <div class="poster-frame" id="pFrame"><div class="poster-scale" id="pScale"></div></div>
     </section>`);
@@ -557,7 +557,7 @@ async function saveOutlinePdf() {
 }
 
 // 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
-const STICKY_MAX = 66, STICKY_MIN = 24;
+const STICKY_MAX = 52, STICKY_MIN = 24;
 function fitStickies(poster) {
   const cols = poster ? [...poster.querySelectorAll('.p-col')] : [];
   if (!cols.length) return;
