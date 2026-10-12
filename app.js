@@ -546,6 +546,7 @@ function buildMissionsEditor() {
       <div class="ed-block">
         <h3>샘플 데이터 <small>A1 전지가 어떻게 나오는지 미리 볼 때</small></h3>
         <p class="sub">팀마다 포스트잇·합의 문장·이름(홍길동 등 가짜 이름)을 채워요. 샘플만 골라서 지울 수 있고, 사람들이 적은 내용은 그대로 남아요.</p>
+        <textarea id="sampleJson" rows="4" placeholder="sample.local.json 내용을 여기에 붙여 넣어요 (내 컴퓨터 미리보기에서는 비워 둬도 돼요)"></textarea>
         <div class="row-btns">
           <button class="btn" id="seedSample">샘플 넣기</button>
           <button class="btn ghost" id="clearSample">샘플 지우기</button>
@@ -592,14 +593,21 @@ function buildMissionsEditor() {
 
 // 샘플: 옆 폴더 sample.local.json (깃허브에 올리지 않는 파일) 을 읽어 팀마다 채운다.
 // 모든 샘플에는 sample: true 가 붙어 있어서 '샘플 지우기'로 그것만 지운다.
+// 붙여 넣은 내용이 있으면 그걸 쓰고, 없으면 옆 폴더 파일을 찾아본다.
 async function seedSample() {
   let src;
+  const pasted = $('#sampleJson')?.value.trim();
   try {
-    const res = await fetch('../sample.local.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error();
-    src = await res.json();
+    if (pasted) {
+      src = JSON.parse(pasted);
+    } else {
+      const res = await fetch('../sample.local.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error();
+      src = await res.json();
+    }
+    if (typeof src !== 'object' || Array.isArray(src)) throw new Error();
   } catch {
-    return toast('샘플 파일을 찾지 못했어요. 내 컴퓨터 미리보기에서만 쓸 수 있어요');
+    return toast(pasted ? '샘플 JSON 모양이 맞지 않아요' : '아래 칸에 sample.local.json 내용을 붙여 넣고 다시 눌러 주세요');
   }
   const t0 = now() - 3600000;
   const up = {};
