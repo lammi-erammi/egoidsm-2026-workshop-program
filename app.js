@@ -24,7 +24,7 @@ const S = {
   meta: undefined, teams: {}, stage: null, presence: {},
   online: true, offset: 0,
   view: 'board', team: me.team, joining: false,
-  posterTeam: '', posterLimit: 8, posterNotes: true,
+  posterTeam: '', posterLimit: 8, posterNotes: true, agreeFont: saved.get('ws-agree-font'),
   built: ''
 };
 let store;
@@ -445,24 +445,31 @@ function buildPoster() {
     <section class="poster-view">
       <div class="poster-controls">
         <label>팀 <select id="pTeam">${teamList().map(t => `<option value="${esc(t.id)}" ${t.id === S.posterTeam ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
+        <label>합의 글씨 <select id="pAgreeFont">${Object.entries(AGREE_FONTS).map(([k, f]) => `<option value="${k}" ${k === S.agreeFont ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label>
         <label><input type="checkbox" id="pNotes" ${S.posterNotes ? 'checked' : ''}> 포스트잇 넣기</label>
         <label>칸마다 <select id="pLimit">${[4, 6, 8, 10, 14, 99].map(n => `<option value="${n}" ${n === S.posterLimit ? 'selected' : ''}>${n === 99 ? '전부' : n + '장'}</option>`).join('')}</select></label>
-        <button class="btn primary" id="pPrint">인쇄 / PDF로 저장</button>
-        <p class="hint">인쇄 창에서 <b>대상: PDF로 저장</b>, <b>여백: 없음</b>, <b>배경 그래픽: 켜기</b>로 저장하면 A1(594×841mm) 크기 PDF가 나와요. 공감(♥)이 많은 포스트잇부터 들어가요.</p>
+        <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
+        <button class="btn" id="pPrint">인쇄 창으로 보기</button>
+        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1(594×841mm) 파일이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 공감(♥)이 많은 포스트잇부터 들어가요.</p>
       </div>
       <div class="poster-frame" id="pFrame"><div class="poster-scale" id="pScale"></div></div>
     </section>`);
   $('#pTeam').onchange = e => { S.posterTeam = e.target.value; updatePoster(); };
   $('#pNotes').onchange = e => { S.posterNotes = e.target.checked; updatePoster(); };
+  // 글꼴이 다 받아진 뒤에 다시 그려야 포스트잇 칸 높이가 맞는다
+  const withAgreeFont = () => document.fonts.load(`80px ${AGREE_FONTS[S.agreeFont].family}`, '가').catch(() => {}).then(updatePoster);
+  $('#pAgreeFont').onchange = e => { S.agreeFont = e.target.value; saved.set('ws-agree-font', S.agreeFont); updatePoster(); withAgreeFont(); };
+  withAgreeFont();
   $('#pLimit').onchange = e => { S.posterLimit = +e.target.value; updatePoster(); };
   $('#pPrint').onclick = () => {
     $('#poster-print').innerHTML = posterHtml(S.posterTeam);
     // PDF로 저장할 때 파일 이름이 페이지 제목을 따라간다 → 경영팀_프로그램_그로스팀.pdf
     const title = document.title;
-    document.title = `경영팀_프로그램_${(teamOf(S.posterTeam)?.name || '').replace(/[\\/:*?"<>|\s]+/g, '')}`;
+    document.title = posterFileName();
     window.addEventListener('afterprint', () => { document.title = title; }, { once: true });
     window.print();
   };
+  $('#pOutline').onclick = saveOutlinePdf;
   updatePoster();
   document.fonts?.ready.then(updatePoster);
 }
@@ -473,6 +480,46 @@ function updatePoster() {
   box.innerHTML = posterHtml(S.posterTeam);
   fitStickies(box.firstElementChild);
   fitPoster();
+}
+
+// A1 전지의 '우리 이렇게 일하자' 문장 글씨체. 글꼴마다 폭이 달라서 크기를 따로 맞춘다.
+// (아웃라인 PDF용 글꼴 파일은 outline-pdf.js 의 FONT_FILES 에 같이 있어야 한다)
+const AGREE_FONTS = {
+  poorstory: { label: '푸어 스토리', family: "'Poor Story'", size: 80 },
+  himelody: { label: '하이멜로디', family: "'Hi Melody'", size: 80 },
+  pen: { label: '나눔손글씨 펜 (예전)', family: "'Nanum Pen Script'", size: 96 }
+};
+if (!AGREE_FONTS[S.agreeFont]) S.agreeFont = 'poorstory';
+
+const posterFileName = () => `경영팀_프로그램_${(teamOf(S.posterTeam)?.name || '').replace(/[\\/:*?"<>|\s]+/g, '')}`;
+
+// 글자를 모두 선으로 바꾼 A1 PDF를 바로 내려받는다 (outline-pdf.js)
+async function saveOutlinePdf() {
+  const btn = $('#pOutline');
+  const label = btn.textContent;
+  btn.disabled = true;
+  // 줄이지 않은 실제 크기 전지를 화면 밖에 그려서 위치를 잰다
+  const holder = document.createElement('div');
+  holder.className = 'poster-measure';
+  holder.innerHTML = posterHtml(S.posterTeam);
+  document.body.appendChild(holder);
+  try {
+    const { outlinePdf } = await import('./outline-pdf.js');
+    const { blob, missing } = await outlinePdf(holder.firstElementChild, msg => { btn.textContent = msg; });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = posterFileName() + '.pdf';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast(missing ? `저장했어요. 다만 글꼴에 없는 글자 ${missing}개가 빈칸으로 들어갔어요` : '아웃라인 PDF를 저장했어요');
+  } catch (err) {
+    console.error(err);
+    toast('PDF를 만들지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요');
+  } finally {
+    holder.remove();
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 // 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
@@ -510,7 +557,7 @@ function posterHtml(teamId) {
   const members = listOf(d.members).sort((a, b) => a.ts - b.ts);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   return `
-    <div class="poster" style="--sticky:${S.posterFont || STICKY_MAX}pt">
+    <div class="poster" style="--sticky:${S.posterFont || STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
       <div class="p-top"><span>${esc(EVENT.title)} · ${esc(EVENT.program)}</span><span>${esc(EVENT.date)}</span></div>
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>우리 이렇게 일하자</h1>
       <div class="p-missions">

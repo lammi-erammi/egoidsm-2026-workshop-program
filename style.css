@@ -17,7 +17,8 @@
   --radius: 14px;
   --shadow: 0 1px 2px rgba(31, 29, 26, .06), 0 4px 14px rgba(31, 29, 26, .06);
   --hand: 'Nanum Pen Script', cursive;
-  --sans: 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  /* 아웃라인 PDF(outline-pdf.js)가 같은 글꼴 파일로 글자를 그리므로 바꿀 때는 둘 다 바꾼다 */
+  --sans: 'Pretendard', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -203,6 +204,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .poster-frame { position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 6px 30px rgba(0,0,0,.15); background: #fff; }
 .poster-scale { transform-origin: 0 0; position: absolute; top: 0; left: 0; }
 #poster-print { display: none; }
+.poster-measure { position: absolute; left: -100000px; top: 0; }
 
 /* ── A1 전지 (594 × 841mm) ── */
 .poster { width: 594mm; height: 841mm; background: #fffdf8; color: var(--ink); padding: 34mm 36mm 28mm; display: flex; flex-direction: column; gap: 14mm; font-family: var(--sans); overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -216,7 +218,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-m p { font-size: 36pt; font-weight: 700; line-height: 1.3; letter-spacing: -.5pt; margin-bottom: 5mm; }
 .p-m p.sm { font-size: 27pt; font-weight: 500; }
 .p-agree { list-style: none; margin: 0; padding: 2mm 0; display: flex; flex-direction: column; gap: 9mm; flex: none; }
-.p-agree li { display: flex; align-items: center; gap: 9mm; font-family: var(--hand); font-size: 96pt; line-height: 1.05; word-break: keep-all; }
+.p-agree li { display: flex; align-items: center; gap: 9mm; font-family: var(--agree-font, var(--hand)); font-size: var(--agree-size, 96pt); line-height: 1.05; word-break: keep-all; }
 .p-agree li.empty { font-family: var(--sans); font-size: 24pt; color: var(--ink-3); }
 .p-n { flex: none; width: 24mm; height: 24mm; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-family: var(--sans); font-weight: 900; font-size: 40pt; }
 /* 포스트잇 칸은 남는 높이를 모두 쓰고, 글씨 크기(--sticky)는 app.js 가 칸에 맞춰 최대한 크게 정한다 */
