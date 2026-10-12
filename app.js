@@ -308,11 +308,12 @@ function buildBoard() {
       <div class="paper" data-focus="agree">
         <div class="paper-head">
           <h2>우리 이렇게 일하자</h2>
-          <p>포스트잇의 <b>‘전지로’</b>를 누르거나 직접 적어요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
+          <p>포스트잇의 <b>‘전지로’</b>를 누르거나 직접 적어요. <b>${AGREE_MAX}개까지, 한 문장 ${AGREE_LEN}자까지</b> 쓸 수 있어요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
         </div>
         <ol class="agree" id="agree"></ol>
         <form class="composer agree-composer">
-          <input maxlength="300" placeholder="팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)">
+          <input maxlength="${AGREE_LEN}" placeholder="팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)">
+          <span class="count" id="agreeCount">0/${AGREE_LEN}</span>
           <button class="btn primary">전지에 쓰기</button>
         </form>
         <div class="signers" id="signers"></div>
@@ -381,6 +382,15 @@ function updateBoard() {
       </li>`).join('')
     : '<li class="empty">아직 합의한 문장이 없어요</li>';
 
+  // 3개가 차면 입력 칸을 막는다
+  const full = agree.length >= AGREE_MAX;
+  const input = $('.agree-composer input');
+  input.disabled = full;
+  $('.agree-composer button').disabled = full;
+  input.placeholder = full
+    ? `${AGREE_MAX}개가 다 찼어요. 바꾸려면 하나를 고치거나 지워 주세요`
+    : '팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)';
+
   const members = listOf(data.members).sort((a, b) => a.ts - b.ts);
   $('#signers').innerHTML = members.length
     ? `<span class="lbl">함께한 사람</span>${members.map(m => `<span class="sign">${esc(m.name)}</span>`).join('')}`
@@ -403,9 +413,33 @@ function noteHtml(n) {
     </div>`;
 }
 
-function editText(title, text) {
+// ── 합의 문장: 팀마다 a1·a2·a3 세 자리만 있다 (규칙에서도 같은 자리만 허용) ──
+const AGREE_MAX = 3, AGREE_LEN = 40;
+const AGREE_SLOTS = ['a1', 'a2', 'a3'];
+
+async function addAgree(text, from) {
+  if (text.length > AGREE_LEN) {
+    const short = await editText(`전지에는 ${AGREE_LEN}자까지 들어가요. 줄여 주세요`, text, AGREE_LEN);
+    if (!short) return false;
+    if (short.length > AGREE_LEN) { toast(`${AGREE_LEN}자를 넘었어요 (${short.length}자)`); return false; }
+    text = short;
+  }
+  const slot = AGREE_SLOTS.find(k => !S.teams[S.team]?.agree?.[k]);
+  if (!slot) { toast(`합의 문장은 ${AGREE_MAX}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
+  const ts = now();
+  try {
+    await store.set(`teams/${S.team}/agree/${slot}`, { text, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
+    return true;
+  } catch {
+    toast('방금 다른 사람이 먼저 써서 자리가 찼어요. 목록을 보고 다시 해 주세요');
+    return false;
+  }
+}
+
+function editText(title, text, maxLength = 500) {
   const d = $('#editDialog');
   $('#editTitle').textContent = title;
+  $('#editText').maxLength = maxLength;
   $('#editText').value = text;
   d.returnValue = '';
   return new Promise(resolve => {
@@ -558,7 +592,6 @@ function posterHtml(teamId) {
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   return `
     <div class="poster" style="--sticky:${S.posterFont || STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
-      <div class="p-top"><span>${esc(EVENT.title)} · ${esc(EVENT.program)}</span><span>${esc(EVENT.date)}</span></div>
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>우리 이렇게 일하자</h1>
       <div class="p-missions">
         <div class="p-m"><b>${esc(c.name || '에고이즘')}의 미션</b><p>${br(c.mission)}</p>${c.goal ? `<b>목표</b><p class="sm">${br(c.goal)}</p>` : ''}</div>
@@ -689,7 +722,9 @@ async function seedSample() {
         up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
       });
     }
-    (s.agree || []).forEach((text, i) => { up[`${tid}/agree/s${i}`] = { text, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true }; });
+    (s.agree || []).slice(0, AGREE_MAX).forEach((text, i) => {
+      up[`${tid}/agree/${AGREE_SLOTS[i]}`] = { text: text.slice(0, AGREE_LEN), name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
+    });
   }
   await save(store.update('teams', up));
   toast('샘플을 넣었어요. A1 출력 탭에서 확인해 보세요');
@@ -746,8 +781,8 @@ document.addEventListener('click', async e => {
       return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note?.likes?.[uid] ? null : true));
     case 'promote':
       if (!note || note.promoted) return;
-      store.push(`${teamPath}/agree`, { text: note.text, name: me.name || '진행자', uid, ts: now(), order: now() });
-      return save(store.set(`${teamPath}/notes/${noteId}/promoted`, true));
+      if (await addAgree(note.text, noteId)) save(store.set(`${teamPath}/notes/${noteId}/promoted`, true));
+      return;
     case 'edit': {
       const text = await editText('포스트잇 고치기', note?.text || '');
       if (text) save(store.set(`${teamPath}/notes/${noteId}/text`, text));
@@ -759,8 +794,9 @@ document.addEventListener('click', async e => {
 
     case 'agree-edit': {
       const a = S.teams[S.team]?.agree?.[agreeId];
-      const text = await editText('전지 문장 고치기', a?.text || '');
-      if (text) save(store.set(`${teamPath}/agree/${agreeId}/text`, text));
+      const text = await editText(`전지 문장 고치기 (${AGREE_LEN}자까지)`, a?.text || '', AGREE_LEN);
+      if (text && text.length > AGREE_LEN) toast(`${AGREE_LEN}자를 넘었어요 (${text.length}자)`);
+      else if (text) save(store.set(`${teamPath}/agree/${agreeId}/text`, text));
       return;
     }
     case 'agree-del':
@@ -826,13 +862,21 @@ document.addEventListener('submit', e => {
   const text = input.value.trim();
   if (!text || !S.team) return;
   if (form.classList.contains('agree-composer')) {
-    store.push(`teams/${S.team}/agree`, { text, name: me.name || '진행자', uid, ts: now(), order: now() });
+    addAgree(text).then(ok => { if (ok) { input.value = ''; updateCount(); } });
+    return;
   } else {
     store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now() });
   }
   input.value = '';
   input.focus();
 });
+
+// 합의 문장 글자 수 표시 (예: 12/40)
+function updateCount() {
+  const input = $('.agree-composer input'), count = $('#agreeCount');
+  if (input && count) count.textContent = `${input.value.length}/${AGREE_LEN}`;
+}
+document.addEventListener('input', e => { if (e.target.matches('.agree-composer input')) updateCount(); });
 
 // 포스트잇 칸: Enter = 붙이기, Shift+Enter = 줄바꿈 (한글 입력 중 Enter는 무시)
 document.addEventListener('keydown', e => {
