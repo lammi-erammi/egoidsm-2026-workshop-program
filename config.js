@@ -36,19 +36,19 @@ export const EVENT = {
 
 // 3) 진행 순서와 시간(분). 진행자 화면의 타이머가 이 시간을 쓴다.
 //    focus: 이 단계에서 강조할 칸 (q1·q2·q3 = 질문 칸, agree = 전지 합의 칸)
-//    15:30~16:30, 60분
+//    15:30~16:30 (단계 합계 55분, 5분 여유)
 export const AGENDA = [
-  { title: '접속·안내', minutes: 5, focus: '', desc: '링크로 들어와 이름과 팀을 골라요' },
-  { title: '오프닝', minutes: 5, focus: 'mission', desc: '회사·부서의 미션과 목표를 함께 읽어요' },
-  { title: '회사 → 우리 팀', minutes: 12, focus: 'q1', desc: '회사의 미션·목표를 이루려면 우리 팀은?' },
-  { title: '팀 미션 → 얼라인', minutes: 12, focus: 'q2', desc: '팀의 미션·목표에 맞추려면 우리는?' },
-  { title: '높은 성과', minutes: 12, focus: 'q3', desc: '높은 성과를 내려면 어떻게 일할까?' },
-  { title: '합의', minutes: 14, focus: 'agree', desc: '“우리 이렇게 일하자”를 전지에 정리해요' }
+  { title: '접속 안내', minutes: 2, focus: '', desc: '핸드폰으로 들어와 이름과 팀을 골라요' },
+  { title: '오프닝', minutes: 3, focus: 'mission', desc: '회사·부서의 미션과 목표를 함께 읽어요' },
+  { title: '회사 얼라인', minutes: 12, focus: 'q1', desc: '회사 미션·목표를 위해 우리 팀은 무엇을 할까?' },
+  { title: '팀 얼라인', minutes: 12, focus: 'q2', desc: '팀 미션·목표에 맞추려면 어떻게 할까?' },
+  { title: '일하는 방법', minutes: 12, focus: 'q3', desc: '높은 성과를 내려면 어떻게 일할까?' },
+  { title: '우리 이렇게 일하자', minutes: 14, focus: 'agree', desc: '팀이 합의한 문장 3개를 전지에 정리해요' }
 ];
 
 // 4) 질문 세 개 (포스트잇 칸)
 export const QUESTIONS = [
-  { id: 'q1', short: '회사 → 우리 팀', text: '회사 미션·목표를 위해 우리 팀은 무엇을 할까?' },
-  { id: 'q2', short: '팀 미션 → 얼라인', text: '팀 미션·목표에 맞추려면 어떻게 할까?' },
-  { id: 'q3', short: '높은 성과', text: '높은 성과를 내려면 어떻게 일할까?' }
+  { id: 'q1', short: '회사 얼라인', text: '회사 미션·목표를 위해 우리 팀은 무엇을 할까?' },
+  { id: 'q2', short: '팀 얼라인', text: '팀 미션·목표에 맞추려면 어떻게 할까?' },
+  { id: 'q3', short: '일하는 방법', text: '높은 성과를 내려면 어떻게 일할까?' }
 ];
