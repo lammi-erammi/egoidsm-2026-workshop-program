@@ -149,6 +149,10 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 .signers { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
 .sign { font-family: var(--hand); font-size: 19px; }
 
+/* 다른 팀 전지 (참가자): 쓰기·고치기 버튼 숨김 */
+.readonly-note { background: #eef3fd; color: #1d4ed8; border-radius: 10px; padding: 10px 14px; font-weight: 700; text-align: center; }
+.board.readonly .composer, .board.readonly .note-foot button, .board.readonly .aact { display: none; }
+
 /* 전지에 붙일 포스트잇 (📌) */
 .pin-count { font-size: 13px; color: var(--ink-2); background: var(--bg); border-radius: 8px; padding: 6px 10px; }
 .pin-count b { color: var(--ink); }

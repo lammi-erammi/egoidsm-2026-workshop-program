@@ -185,7 +185,7 @@ function renderHeader() {
     <header class="top">
       <div class="brand"><b>${esc(EVENT.title)}</b><span>${esc(EVENT.program)}</span></div>
       <nav class="tabs">
-        ${team || S.team ? `<button data-view="board" class="${S.view === 'board' ? 'on' : ''}">${S.team && S.team !== me.team ? esc(teamOf(S.team)?.name) + ' 전지' : '우리 팀 전지'}</button>` : ''}
+        ${team || S.team ? `<button data-view="board" class="${S.view === 'board' && (!team || S.team === me.team) ? 'on' : ''}">${team ? '우리 팀 전지' : esc(teamOf(S.team)?.name) + ' 전지'}</button>` : ''}
         <button data-view="all" class="${S.view === 'all' ? 'on' : ''}">전체 팀</button>
         ${S.admin ? `<button data-view="poster" class="${S.view === 'poster' ? 'on' : ''}">A1 출력</button>
         <button data-view="missions" class="${S.view === 'missions' ? 'on' : ''}">미션 편집</button>` : ''}
@@ -368,7 +368,8 @@ function buildJoin() {
 function buildBoard() {
   shell(`
     <div class="board-wrap">
-    <section class="board">
+    <section class="board ${canEditTeam() ? '' : 'readonly'}">
+      ${canEditTeam() ? '' : '<div class="readonly-note">👀 다른 팀 전지예요. 볼 수만 있어요</div>'}
       <div class="board-title">
         <h1 id="boardName"></h1>
         <div class="online" id="online"></div>
@@ -462,7 +463,7 @@ function updateBoard() {
 
   $('#missions').innerHTML = companyCard(c) + teamCard(team);
 
-  const notes = listOf(data.notes);
+  const notes = notesOf(S.team);
   for (const q of QUESTIONS) {
     const pins = pinsOf(S.team, q.id);
     const full = pins.length >= PIN_MAX;
@@ -500,12 +501,13 @@ function updateBoard() {
     ? `${AGREE_MAX}개가 다 찼어요. 바꾸려면 하나를 고치거나 지워 주세요`
     : '팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)';
 
-  const members = listOf(data.members).sort((a, b) => a.ts - b.ts);
+  const members = membersOf(S.team);
   $('#signers').innerHTML = members.length
     ? `<span class="lbl">함께한 사람</span>${members.map(m => `<span class="sign">${esc(m.name)}</span>`).join('')}`
     : '';
 
   renderLivePreview();
+  cleanupDeadPins(S.team);
 }
 
 function noteHtml(n, pinSlot, pinsFull) {
@@ -524,7 +526,7 @@ function noteHtml(n, pinSlot, pinsFull) {
         ${pinSlot
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
           : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 질문은 ${PIN_MAX}장이 다 찼어요"` : `title="A1 전지에 붙여요 (질문마다 ${PIN_MAX}장)"`}>📌 전지에 붙이기</button>`}
-        <button class="link" data-act="promote" title="이 내용을 '우리 이렇게 일하자' 합의 문장으로 올려요">${n.promoted ? '합의에 있음' : '합의로'}</button>
+        <button class="link" data-act="promote" title="이 내용을 '우리 이렇게 일하자' 합의 문장으로 올려요">${isPromoted(S.team, n.id) ? '합의에 있음' : '합의로'}</button>
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
@@ -534,13 +536,55 @@ function noteHtml(n, pinSlot, pinsFull) {
 // 자리에는 포스트잇 id와 전지에 들어갈 글(40자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
 const PIN_MAX = 4, PIN_LEN = 40;
 const PIN_SLOTS = ['p1', 'p2', 'p3', 'p4'];
-const pinsOf = (teamId, q) => PIN_SLOTS
-  .map(slot => ({ slot, ...(S.teams[teamId]?.pins?.[q]?.[slot] || {}) }))
-  .filter(p => p.text)
-  .sort((a, b) => a.ts - b.ts);
-const pinSlotOf = (teamId, q, noteId) => PIN_SLOTS.find(k => S.teams[teamId]?.pins?.[q]?.[k]?.note === noteId);
+// 자리 하나하나를 '살아 있는 자리'와 '버려진 자리'로 나눈다.
+// 버려진 자리 = 원래 포스트잇이 지워졌거나, 같은 포스트잇이 두 자리에 붙은 경우의 뒤쪽 자리
+// 글과 질문이 있는 포스트잇만 (반쯤 지워진 찌꺼기는 보이지 않게)
+const isNote = n => n && typeof n.text === 'string' && n.text && n.q;
+const notesOf = teamId => listOf(S.teams[teamId]?.notes).filter(isNote);
+
+function pinSlots(teamId, q) {
+  const notes = S.teams[teamId]?.notes || {};
+  const seen = new Set();
+  const live = [], dead = [];
+  PIN_SLOTS
+    .map(slot => ({ slot, ...(S.teams[teamId]?.pins?.[q]?.[slot] || {}) }))
+    .filter(p => p.ts)
+    .sort((a, b) => a.ts - b.ts)
+    .forEach(p => {
+      if (p.text && isNote(notes[p.note]) && !seen.has(p.note)) { seen.add(p.note); live.push(p); }
+      else dead.push(p);
+    });
+  return { live, dead };
+}
+const pinsOf = (teamId, q) => pinSlots(teamId, q).live;
+const pinSlotOf = (teamId, q, noteId) => pinsOf(teamId, q).find(p => p.note === noteId)?.slot;
+
+// 버려진 자리를 치운다 (한 번만 시도. 규칙상 못 지우는 사람이면 조용히 넘어가고, 화면에는 원래 안 보인다)
+const cleaning = new Set();
+function cleanupDeadPins(teamId) {
+  for (const q of QUESTIONS) {
+    for (const p of pinSlots(teamId, q.id).dead) {
+      const path = `teams/${teamId}/pins/${q.id}/${p.slot}`;
+      if (cleaning.has(path)) continue;
+      cleaning.add(path);
+      store.remove(path).catch(() => {}).finally(() => setTimeout(() => cleaning.delete(path), 5000));
+    }
+  }
+}
+
+// 포스트잇이 합의 문장으로 올라가 있는지는 합의 문장 쪽을 보고 판단한다 (합의 문장을 지우면 다시 올릴 수 있게)
+const isPromoted = (teamId, noteId) => listOf(S.teams[teamId]?.agree).some(a => a.from === noteId);
+
+// 같은 사람이 핸드폰·노트북 두 곳에서 들어와도 이름은 한 번만
+function membersOf(teamId) {
+  const seen = new Set();
+  return listOf(S.teams[teamId]?.members)
+    .sort((a, b) => a.ts - b.ts)
+    .filter(m => m.name && !seen.has(m.name.trim()) && seen.add(m.name.trim()));
+}
 
 async function pinNote(note, noteId) {
+  if (pinSlotOf(S.team, note.q, noteId)) return toast('이미 전지에 붙어 있어요');
   let text = note.text;
   if (text.length > PIN_LEN) {
     const short = await editText(`전지에는 ${PIN_LEN}자까지 들어가요. 전지에 넣을 글로 줄여 주세요 (원래 포스트잇은 그대로예요)`, text, PIN_LEN);
@@ -548,7 +592,11 @@ async function pinNote(note, noteId) {
     if (short.length > PIN_LEN) return toast(`${PIN_LEN}자를 넘었어요 (${short.length}자)`);
     text = short;
   }
-  const slot = PIN_SLOTS.find(k => !S.teams[S.team]?.pins?.[note.q]?.[k]);
+  if (!S.teams[S.team]?.notes?.[noteId]) return toast('그사이 이 포스트잇이 지워졌어요');
+  // 버려진 자리는 먼저 비우고 쓴다
+  for (const p of pinSlots(S.team, note.q).dead) await store.remove(`teams/${S.team}/pins/${note.q}/${p.slot}`).catch(() => {});
+  const taken = new Set(pinsOf(S.team, note.q).map(p => p.slot));
+  const slot = PIN_SLOTS.find(k => !taken.has(k));
   if (!slot) return toast(`이 질문은 전지에 ${PIN_MAX}장까지 붙일 수 있어요. 하나를 떼고 붙여 주세요`);
   try {
     await store.set(`teams/${S.team}/pins/${note.q}/${slot}`, { note: noteId, text, ts: now(), by: uid });
@@ -603,7 +651,7 @@ function updateAll() {
   if (!grid) return;
   grid.innerHTML = teamList().map(t => {
     const d = S.teams[t.id] || {};
-    const notes = listOf(d.notes);
+    const notes = notesOf(t.id);
     const agree = sortAgree(listOf(d.agree));
     const online = listOf(S.presence[t.id]).length;
     return `
@@ -739,7 +787,7 @@ function posterHtml(teamId) {
   const d = S.teams[teamId] || {};
   const c = S.meta.company || {};
   const agree = sortAgree(listOf(d.agree));
-  const members = listOf(d.members).sort((a, b) => a.ts - b.ts);
+  const members = membersOf(teamId);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   return `
     <div class="poster" style="--sticky:${STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
@@ -902,7 +950,10 @@ async function clearSample() {
       for (const [id, v] of Object.entries(d[part] || {})) if (v?.sample) up[`${tid}/${part}/${id}`] = null;
     }
     for (const [q, slots] of Object.entries(d.pins || {})) {
-      for (const [slot, v] of Object.entries(slots || {})) if (v?.sample) up[`${tid}/pins/${q}/${slot}`] = null;
+      // 샘플 자리 + 사람이 샘플 포스트잇에 붙인 자리 (포스트잇이 지워지면 버려진 자리가 되므로 같이 지운다)
+      for (const [slot, v] of Object.entries(slots || {})) {
+        if (v?.sample || d.notes?.[v?.note]?.sample) up[`${tid}/pins/${q}/${slot}`] = null;
+      }
     }
   }
   if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
@@ -926,18 +977,23 @@ function teamRow(t) {
 }
 
 // ── 클릭·입력 처리 ──────────────────────────────────────────
+// 참가자는 자기 팀 전지만 고칠 수 있다 (다른 팀 전지는 '전체 팀'에서 구경만). 진행자는 모든 팀
+const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'agree-edit', 'agree-del', 'agree-up', 'agree-down']);
+const canEditTeam = () => S.admin || S.team === me.team;
+
 document.addEventListener('click', async e => {
   const el = e.target.closest('[data-act], [data-view]');
   if (!el || !store) return;
   if (el.dataset.view) {
-    if (el.dataset.view === 'board') return go('board', S.team || me.team);
+    if (el.dataset.view === 'board') return go('board', me.team || S.team); // '우리 팀 전지'는 항상 내 팀으로
     return go(el.dataset.view);
   }
   const act = el.dataset.act;
+  if (EDIT_ACTS.has(act) && !canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
   const teamPath = `teams/${S.team}`;
   const noteId = el.closest('.note')?.dataset.id;
   const agreeId = el.closest('#agree li')?.dataset.id;
-  const note = noteId && S.teams[S.team]?.notes?.[noteId];
+  const note = noteId && isNote(S.teams[S.team]?.notes?.[noteId]) ? S.teams[S.team].notes[noteId] : null;
 
   switch (act) {
     case 'change-me': S.joining = true; S.built = ''; return render();
@@ -945,43 +1001,54 @@ document.addEventListener('click', async e => {
     case 'logout': return store.signOut();
     case 'open-team': return go('board', el.dataset.team);
 
+    // 포스트잇을 누르는 사이 다른 사람이 지웠을 수 있다 → 지워진 포스트잇에는 아무것도 쓰지 않는다
     case 'like':
-      return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note?.likes?.[uid] ? null : true));
+      if (!note) return;
+      return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note.likes?.[uid] ? null : true));
     case 'promote':
-      if (!note || note.promoted) return;
-      if (await addAgree(note.text, noteId)) save(store.set(`${teamPath}/notes/${noteId}/promoted`, true));
+      if (!note || isPromoted(S.team, noteId)) return;
+      await addAgree(note.text, noteId);
       return;
     case 'edit': {
-      const text = await editText('포스트잇 고치기', note?.text || '');
-      if (!text) return;
-      save(store.set(`${teamPath}/notes/${noteId}/text`, text));
-      // 전지에 붙어 있고 전지 글이 원래 포스트잇과 같았다면 전지 글도 같이 고친다
+      if (!note) return;
+      const before = note.text;
+      const text = await editText('포스트잇 고치기', before);
+      if (!text || text === before) return;
+      if (!S.teams[S.team]?.notes?.[noteId]) return toast('그사이 이 포스트잇이 지워졌어요');
+      const up = { [`notes/${noteId}/text`]: text };
+      // 전지에 붙어 있고 전지 글이 원래 포스트잇과 같았다면 전지 글도 같이 고친다 (한 번에 저장)
       const slot = pinSlotOf(S.team, note.q, noteId);
       const pin = slot && S.teams[S.team].pins[note.q][slot];
-      if (pin && pin.text === note.text) {
-        if (text.length <= PIN_LEN) save(store.set(`${teamPath}/pins/${note.q}/${slot}/text`, text));
+      if (pin && pin.text === before) {
+        if (text.length <= PIN_LEN) up[`pins/${note.q}/${slot}/text`] = text;
         else toast(`전지에는 ${PIN_LEN}자까지라 전지에 붙은 글은 그대로예요. 바꾸려면 떼고 다시 붙여 주세요`);
       }
-      return;
+      return save(store.update(teamPath, up));
     }
-    case 'del':
-      if (confirm('이 포스트잇을 지울까요?')) {
-        const slot = pinSlotOf(S.team, note?.q, noteId);
-        if (slot) save(store.remove(`${teamPath}/pins/${note.q}/${slot}`));
-        save(store.remove(`${teamPath}/notes/${noteId}`));
+    case 'del': {
+      if (!note || !confirm('이 포스트잇을 지울까요?')) return;
+      // 포스트잇과 전지 자리를 한 번에 지운다 (둘 중 하나만 지워지는 일이 없게)
+      const up = { [`notes/${noteId}`]: null };
+      for (const slot of PIN_SLOTS) {
+        if (S.teams[S.team]?.pins?.[note.q]?.[slot]?.note === noteId) up[`pins/${note.q}/${slot}`] = null;
       }
-      return;
+      return save(store.update(teamPath, up));
+    }
     case 'pin':
       if (note) await pinNote(note, noteId);
       return;
     case 'unpin':
+      if (!note) return;
       return save(store.remove(`${teamPath}/pins/${note.q}/${el.dataset.slot}`));
 
     case 'agree-edit': {
       const a = S.teams[S.team]?.agree?.[agreeId];
-      const text = await editText(`전지 문장 고치기 (${AGREE_LEN}자까지)`, a?.text || '', AGREE_LEN);
-      if (text && text.length > AGREE_LEN) toast(`${AGREE_LEN}자를 넘었어요 (${text.length}자)`);
-      else if (text) save(store.set(`${teamPath}/agree/${agreeId}/text`, text));
+      if (!a) return;
+      const text = await editText(`전지 문장 고치기 (${AGREE_LEN}자까지)`, a.text || '', AGREE_LEN);
+      if (!text || text === a.text) return;
+      if (!S.teams[S.team]?.agree?.[agreeId]) return toast('그사이 이 문장이 지워졌어요');
+      if (text.length > AGREE_LEN) toast(`${AGREE_LEN}자를 넘었어요 (${text.length}자)`);
+      else save(store.set(`${teamPath}/agree/${agreeId}/text`, text));
       return;
     }
     case 'agree-del':
@@ -1053,6 +1120,7 @@ document.addEventListener('submit', e => {
   const input = form.querySelector('textarea, input');
   const text = input.value.trim();
   if (!text || !S.team) return;
+  if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
   if (form.classList.contains('agree-composer')) {
     addAgree(text).then(ok => { if (ok) { input.value = ''; updateCount(); } });
     return;
