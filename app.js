@@ -279,12 +279,13 @@ async function openJoinOverlay() {
       <div class="jo-card">
         <button class="jo-close" data-act="join-qr-close" title="닫기 (Esc)">✕</button>
         <p class="eyebrow">${esc(EVENT.title)} · ${esc(EVENT.program)}</p>
-        <h1>노트북으로 들어와 주세요</h1>
+        <h1>핸드폰으로 들어와 주세요</h1>
         <div class="jo-body">
           <div class="jo-qr" id="joQr">QR 만드는 중…</div>
           <div class="jo-side">
-            <div class="jo-total"><span>지금 접속</span><b id="joTotal">0</b><span>명</span></div>
-            <ol class="jo-steps"><li>카메라로 QR을 찍거나 링크를 열어요</li><li>이름을 적고 우리 팀을 골라요</li><li>위쪽 이름 옆 초록 점이 보이면 끝!</li></ol>
+            <div class="jo-total"><span>지금 접속</span><b id="joTotal">0</b><span id="joExpected">명</span></div>
+            <div class="jo-bar"><i id="joBar"></i></div>
+            <ol class="jo-steps"><li>핸드폰 카메라로 QR을 찍어요</li><li>이름을 적고 우리 팀을 골라요</li><li>위쪽 이름 옆 초록 점이 보이면 끝!</li></ol>
             <div class="jo-teams" id="joTeams"></div>
           </div>
         </div>
@@ -307,9 +308,16 @@ async function openJoinOverlay() {
 function renderJoinOverlay() {
   const ov = $('#joinOverlay');
   if (!ov || ov.hidden || !S.meta) return;
-  const counts = teamList().map(t => ({ name: t.name, n: listOf(S.presence[t.id]).length }));
-  $('#joTotal').textContent = counts.reduce((sum, c) => sum + c.n, 0);
-  $('#joTeams').innerHTML = counts.map(c => `<span class="${c.n ? 'on' : ''}">${esc(c.name)} <b>${c.n}</b></span>`).join('');
+  const counts = teamList().map(t => ({ name: t.name, n: listOf(S.presence[t.id]).length, exp: +t.expected || 0 }));
+  const total = counts.reduce((sum, c) => sum + c.n, 0);
+  const expected = +S.meta.expected || counts.reduce((sum, c) => sum + c.exp, 0);
+  $('#joTotal').textContent = total;
+  $('#joExpected').textContent = expected ? `/ ${expected}명` : '명';
+  $('#joBar').style.width = expected ? Math.min(100, total / expected * 100) + '%' : '0';
+  $('#joTeams').innerHTML = counts.map(c => {
+    const done = c.exp && c.n >= c.exp;
+    return `<span class="${done ? 'done' : c.n ? 'on' : ''}">${esc(c.name)} <b>${c.n}${c.exp ? '/' + c.exp : ''}</b></span>`;
+  }).join('');
 }
 
 document.addEventListener('keydown', e => {
@@ -600,7 +608,7 @@ function updateAll() {
     const online = listOf(S.presence[t.id]).length;
     return `
       <article class="tcard ${t.id === me.team ? 'mine' : ''}">
-        <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}명</span></header>
+        <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}${+t.expected ? ' / ' + t.expected : ''}명</span></header>
         <div class="counts">${QUESTIONS.map((q, i) => `<span class="cnt ${q.id}" title="${esc(q.text)}">${i + 1}. ${notes.filter(n => n.q === q.id).length}장</span>`).join('')}</div>
         <ol class="mini-agree">${agree.length ? agree.map(a => `<li>${esc(a.text)}</li>`).join('') : '<li class="empty">합의 문장 없음</li>'}</ol>
         <button class="btn sm" data-act="open-team" data-team="${esc(t.id)}">전지 보기</button>
@@ -742,6 +750,7 @@ function posterHtml(teamId) {
           ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
           ${t.goal ? `<b>목표</b><p class="sm">${br(t.goal)}</p>` : ''}
+          ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
         </div>
       </div>
       <ol class="p-agree">
@@ -774,6 +783,7 @@ function buildMissionsEditor() {
         <label class="field">이름<input id="cName" value="${esc(c.name || '에고이즘')}"></label>
         <label class="field">미션<textarea id="cMission" rows="2">${esc(c.mission)}</textarea></label>
         <label class="field">목표<textarea id="cGoal" rows="2">${esc(c.goal)}</textarea></label>
+        <label class="field">워크샵 전체 참가 인원 (접속 현황 'n / 전체'에 쓰여요)<input id="cExpected" type="number" min="0" value="${esc(m.expected ?? '')}"></label>
       </div>
       <div class="ed-block">
         <h3>팀 <small>순서대로 화면에 나와요</small></h3>
@@ -812,6 +822,7 @@ function buildMissionsEditor() {
       const name = $('.tName', r).value.trim();
       if (name) teams[r.dataset.id] = {
         name, order: i,
+        expected: +$('.tExpected', r).value || 0,
         dept: $('.tDept', r).value.trim(),
         deptMission: $('.tDeptMission', r).value.trim(),
         mission: $('.tMission', r).value.trim(),
@@ -819,6 +830,7 @@ function buildMissionsEditor() {
       };
     });
     await save(store.set('meta', {
+      expected: +$('#cExpected').value || 0,
       company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim(), goal: $('#cGoal').value.trim() },
       teams
     }));
@@ -904,6 +916,7 @@ function teamRow(t) {
       <div class="tcol">
         <input class="tName" placeholder="팀 이름" value="${esc(t.name)}">
         <input class="tDept" placeholder="부서 (예: 운영부서)" value="${esc(t.dept)}">
+        <label class="tExp">참가 인원 <input class="tExpected" type="number" min="0" value="${esc(t.expected ?? '')}">명</label>
       </div>
       <textarea class="tDeptMission" rows="2" placeholder="부서 미션">${esc(t.deptMission)}</textarea>
       <textarea class="tMission" rows="2" placeholder="팀·브랜드 미션 (없으면 비워 두기)">${esc(t.mission)}</textarea>
