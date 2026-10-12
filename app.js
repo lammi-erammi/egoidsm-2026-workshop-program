@@ -46,7 +46,8 @@ function toast(msg) {
 }
 const fail = () => toast('저장되지 않았어요. 인터넷 연결을 확인해 주세요. (워크샵이 끝나 잠겼을 수도 있어요)');
 window.addEventListener('store-error', fail);
-const save = p => Promise.resolve(p).catch(fail);
+// 저장이 되면 true, 막히면 안내를 띄우고 false
+const save = p => Promise.resolve(p).then(() => true, () => { fail(); return false; });
 
 // ── 시작 ────────────────────────────────────────────────────
 main();
@@ -877,18 +878,18 @@ function buildMissionsEditor() {
         goal: $('.tGoal', r).value.trim()
       };
     });
-    await save(store.set('meta', {
+    const ok = await save(store.set('meta', {
       expected: +$('#cExpected').value || 0,
       company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim(), goal: $('#cGoal').value.trim() },
       teams
     }));
-    toast('저장했어요');
+    if (ok) toast('저장했어요');
   };
   $('#saveJson').onclick = async () => {
     try {
       const v = JSON.parse($('#metaJson').value);
       if (!v.company || !v.teams) throw new Error();
-      await save(store.set('meta', v));
+      if (!(await save(store.set('meta', v)))) return;
       S.built = '';
       toast('저장했어요');
       render();
@@ -926,20 +927,33 @@ async function seedSample() {
         for (let k = 0; k < likes; k++) l['s' + k] = true;
         up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
       });
-      // 공감 많은 순으로 전지에 붙여 둔다
-      list.map(([text, likes = 0], i) => ({ text, likes, i }))
+      // 공감 많은 순으로 전지에 붙여 둔다. 이미 찬 자리(사람이 붙인 것)는 건드리지 않고 빈 자리에만
+      // (규칙이 찬 자리 덮어쓰기를 막아서, 하나라도 겹치면 샘플 전체가 저장되지 않는다)
+      const usedPins = S.teams[tid]?.pins?.[q.id] || {};
+      const freePins = PIN_SLOTS.filter(k => !usedPins[k]);
+      const pinnedNotes = new Set(Object.values(usedPins).map(p => p?.note));
+      list.map(([text, likes = 0], i) => ({ text, likes, i, note: `s_${q.id}_${i}` }))
+        .filter(p => !pinnedNotes.has(p.note))
         .sort((a, b) => b.likes - a.likes)
-        .slice(0, PIN_MAX)
+        .slice(0, freePins.length)
         .forEach((p, k) => {
-          up[`${tid}/pins/${q.id}/${PIN_SLOTS[k]}`] = { note: `s_${q.id}_${p.i}`, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
+          up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
         });
     }
-    (s.agree || []).slice(0, AGREE_MAX).forEach((text, i) => {
-      up[`${tid}/agree/${AGREE_SLOTS[i]}`] = { text: text.slice(0, AGREE_LEN), name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
+    // 합의 문장도 빈 자리에만
+    const usedAgree = S.teams[tid]?.agree || {};
+    const freeAgree = AGREE_SLOTS.filter(k => !usedAgree[k]);
+    (s.agree || []).slice(0, freeAgree.length).forEach((text, i) => {
+      up[`${tid}/agree/${freeAgree[i]}`] = { text: text.slice(0, AGREE_LEN), name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
   }
-  await save(store.update('teams', up));
-  toast('샘플을 넣었어요. 팀 전지 오른쪽 미리보기나 A1 출력 탭에서 확인해 보세요');
+  try {
+    await store.update('teams', up);
+    toast('샘플을 넣었어요. 이미 사람이 쓴 자리는 그대로 두고 빈 자리에만 넣었어요');
+  } catch (err) {
+    console.error(err);
+    toast('샘플을 넣지 못했어요. 진행자 로그인과 파이어베이스 규칙 게시를 확인해 주세요');
+  }
 }
 
 async function clearSample() {
@@ -957,8 +971,7 @@ async function clearSample() {
     }
   }
   if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
-  await save(store.update('teams', up));
-  toast('샘플을 지웠어요');
+  if (await save(store.update('teams', up))) toast('샘플을 지웠어요');
 }
 
 function teamRow(t) {
