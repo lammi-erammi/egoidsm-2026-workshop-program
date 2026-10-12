@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우리 이렇게 일하자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <div class="loading">불러오는 중…</div>
+</div>
+
+<dialog id="editDialog">
+  <form method="dialog" class="dialog-body">
+    <h3 id="editTitle">고치기</h3>
+    <textarea id="editText" rows="5" maxlength="500"></textarea>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn ghost">취소</button>
+      <button value="ok" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="loginDialog">
+  <form method="dialog" class="dialog-body" id="loginForm">
+    <h3>진행자 로그인</h3>
+    <p class="sub" id="loginNote">파이어베이스에 등록한 진행자 계정으로 로그인해요.</p>
+    <label class="field">이메일<input id="loginEmail" type="email" autocomplete="username" required></label>
+    <label class="field">비밀번호<input id="loginPw" type="password" autocomplete="current-password" required></label>
+    <p class="login-error" id="loginError"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" onclick="this.closest('dialog').close()">취소</button>
+      <button value="ok" class="btn primary" id="loginGo">로그인</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="poster-print"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
