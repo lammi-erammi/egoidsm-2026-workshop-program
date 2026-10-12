@@ -24,7 +24,7 @@ const S = {
   meta: undefined, teams: {}, stage: null, presence: {},
   online: true, offset: 0,
   view: 'board', team: me.team, joining: false,
-  posterTeam: '', posterLimit: 8, posterNotes: true, agreeFont: saved.get('ws-agree-font'),
+  posterTeam: '', posterNotes: true, agreeFont: saved.get('ws-agree-font'),
   built: ''
 };
 let store;
@@ -122,7 +122,8 @@ function render() {
 
   if (S.view === 'board') return show('board:' + S.team, buildBoard, updateBoard);
   if (S.view === 'all') return show('all', buildAll, updateAll);
-  if (S.view === 'poster') return show('poster', buildPoster, updatePoster);
+  if (S.view === 'poster' && S.admin) return show('poster', buildPoster, updatePoster);
+  if (S.view === 'poster') { S.view = S.team ? 'board' : 'all'; return render(); }
   if (S.view === 'missions' && S.admin) return show('missions', buildMissionsEditor);
 }
 
@@ -186,8 +187,8 @@ function renderHeader() {
       <nav class="tabs">
         ${team || S.team ? `<button data-view="board" class="${S.view === 'board' ? 'on' : ''}">${S.team && S.team !== me.team ? esc(teamOf(S.team)?.name) + ' 전지' : '우리 팀 전지'}</button>` : ''}
         <button data-view="all" class="${S.view === 'all' ? 'on' : ''}">전체 팀</button>
-        <button data-view="poster" class="${S.view === 'poster' ? 'on' : ''}">A1 출력</button>
-        ${S.admin ? `<button data-view="missions" class="${S.view === 'missions' ? 'on' : ''}">미션 편집</button>` : ''}
+        ${S.admin ? `<button data-view="poster" class="${S.view === 'poster' ? 'on' : ''}">A1 출력</button>
+        <button data-view="missions" class="${S.view === 'missions' ? 'on' : ''}">미션 편집</button>` : ''}
       </nav>
       <div class="me">
         ${PREVIEW ? '<span class="badge warn" title="파이어베이스 설정 전: 이 컴퓨터의 탭끼리만 공유돼요">미리보기 모드</span>' : ''}
@@ -288,6 +289,7 @@ function buildJoin() {
 // ── 팀 전지 ─────────────────────────────────────────────────
 function buildBoard() {
   shell(`
+    <div class="board-wrap">
     <section class="board">
       <div class="board-title">
         <h1 id="boardName"></h1>
@@ -298,6 +300,7 @@ function buildBoard() {
         ${QUESTIONS.map((q, i) => `
           <div class="col ${q.id}" data-focus="${q.id}">
             <div class="col-head"><span class="qnum">${i + 1}</span><p>${esc(q.text)}</p></div>
+            <div class="pin-count" id="pins-${q.id}"></div>
             <form class="composer" data-q="${q.id}">
               <textarea rows="2" maxlength="500" placeholder="생각을 적고 Enter (줄바꿈은 Shift+Enter)"></textarea>
               <button class="btn primary">붙이기</button>
@@ -308,7 +311,7 @@ function buildBoard() {
       <div class="paper" data-focus="agree">
         <div class="paper-head">
           <h2>우리 이렇게 일하자</h2>
-          <p>포스트잇의 <b>‘전지로’</b>를 누르거나 직접 적어요. <b>${AGREE_MAX}개까지, 한 문장 ${AGREE_LEN}자까지</b> 쓸 수 있어요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
+          <p>포스트잇의 <b>‘합의로’</b>를 누르거나 직접 적어요. <b>${AGREE_MAX}개까지, 한 문장 ${AGREE_LEN}자까지</b> 쓸 수 있어요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
         </div>
         <ol class="agree" id="agree"></ol>
         <form class="composer agree-composer">
@@ -318,8 +321,29 @@ function buildBoard() {
         </form>
         <div class="signers" id="signers"></div>
       </div>
-    </section>`);
+    </section>
+    <aside class="live-preview">
+      <div class="lp-head">
+        <b>A1 전지 미리보기</b>
+        <span class="lbl">팀이 고른 내용이 바로 반영돼요</span>
+      </div>
+      <div class="poster-frame" id="lpFrame"><div class="poster-scale" id="lpScale"></div></div>
+    </aside>
+    </div>`);
   updateBoard();
+  document.fonts?.ready.then(() => { if (S.built.startsWith('board:')) renderLivePreview(); });
+}
+
+// 팀 전지 오른쪽 미리보기: A1 전지를 줄여서 그대로 보여 준다
+function renderLivePreview() {
+  const box = $('#lpScale'), frame = $('#lpFrame');
+  if (!box || !frame) return;
+  box.innerHTML = posterHtml(S.team);
+  const poster = box.firstElementChild;
+  fitStickies(poster);
+  const scale = frame.clientWidth / poster.offsetWidth;
+  box.style.transform = `scale(${scale})`;
+  frame.style.height = poster.offsetHeight * scale + 'px';
 }
 
 const sortNotes = arr => arr.sort((a, b) => Object.keys(b.likes || {}).length - Object.keys(a.likes || {}).length || a.ts - b.ts);
@@ -362,9 +386,16 @@ function updateBoard() {
 
   const notes = listOf(data.notes);
   for (const q of QUESTIONS) {
-    const list = sortNotes(notes.filter(n => n.q === q.id));
+    const pins = pinsOf(S.team, q.id);
+    const full = pins.length >= PIN_MAX;
+    // 전지에 붙인 포스트잇이 맨 위, 나머지는 공감 순
+    const list = sortNotes(notes.filter(n => n.q === q.id))
+      .map(n => ({ n, slot: pinSlotOf(S.team, q.id, n.id) }))
+      .sort((a, b) => (b.slot ? 1 : 0) - (a.slot ? 1 : 0));
+    $(`#pins-${q.id}`).innerHTML = `📌 전지에 붙인 포스트잇 <b>${pins.length}/${PIN_MAX}</b>` +
+      (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '');
     $(`#notes-${q.id}`).innerHTML = list.length
-      ? list.map(n => noteHtml(n)).join('')
+      ? list.map(({ n, slot }) => noteHtml(n, slot, full)).join('')
       : '<p class="empty">아직 붙은 포스트잇이 없어요</p>';
   }
 
@@ -395,22 +426,57 @@ function updateBoard() {
   $('#signers').innerHTML = members.length
     ? `<span class="lbl">함께한 사람</span>${members.map(m => `<span class="sign">${esc(m.name)}</span>`).join('')}`
     : '';
+
+  renderLivePreview();
 }
 
-function noteHtml(n) {
+function noteHtml(n, pinSlot, pinsFull) {
   const likes = Object.keys(n.likes || {}).length;
   const liked = !!n.likes?.[uid];
   const mine = n.uid === uid || S.admin;
+  const pinText = pinSlot ? S.teams[S.team]?.pins?.[n.q]?.[pinSlot]?.text : '';
   return `
-    <div class="note ${esc(n.q)} ${n.uid === uid ? 'mine' : ''}" data-id="${esc(n.id)}">
+    <div class="note ${esc(n.q)} ${n.uid === uid ? 'mine' : ''} ${pinSlot ? 'pinned' : ''}" data-id="${esc(n.id)}">
+      ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : ''}
       <div class="note-text">${br(n.text)}</div>
+      ${pinSlot && pinText !== n.text ? `<div class="pin-text">전지에는: “${esc(pinText)}”</div>` : ''}
       <div class="note-foot">
         <span class="by">${esc(n.name)}</span>
         <button class="like ${liked ? 'on' : ''}" data-act="like" title="공감">♥ ${likes || ''}</button>
-        <button class="link" data-act="promote" title="이 내용을 '우리 이렇게 일하자' 전지로 올려요">${n.promoted ? '전지에 있음' : '전지로'}</button>
+        ${pinSlot
+          ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
+          : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 질문은 ${PIN_MAX}장이 다 찼어요"` : `title="A1 전지에 붙여요 (질문마다 ${PIN_MAX}장)"`}>📌 전지에 붙이기</button>`}
+        <button class="link" data-act="promote" title="이 내용을 '우리 이렇게 일하자' 합의 문장으로 올려요">${n.promoted ? '합의에 있음' : '합의로'}</button>
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
+}
+
+// ── 전지에 붙일 포스트잇: 질문마다 p1~p4 네 자리만 있다 (규칙에서도 같은 자리만 허용) ──
+// 자리에는 포스트잇 id와 전지에 들어갈 글(40자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
+const PIN_MAX = 4, PIN_LEN = 40;
+const PIN_SLOTS = ['p1', 'p2', 'p3', 'p4'];
+const pinsOf = (teamId, q) => PIN_SLOTS
+  .map(slot => ({ slot, ...(S.teams[teamId]?.pins?.[q]?.[slot] || {}) }))
+  .filter(p => p.text)
+  .sort((a, b) => a.ts - b.ts);
+const pinSlotOf = (teamId, q, noteId) => PIN_SLOTS.find(k => S.teams[teamId]?.pins?.[q]?.[k]?.note === noteId);
+
+async function pinNote(note, noteId) {
+  let text = note.text;
+  if (text.length > PIN_LEN) {
+    const short = await editText(`전지에는 ${PIN_LEN}자까지 들어가요. 전지에 넣을 글로 줄여 주세요 (원래 포스트잇은 그대로예요)`, text, PIN_LEN);
+    if (!short) return;
+    if (short.length > PIN_LEN) return toast(`${PIN_LEN}자를 넘었어요 (${short.length}자)`);
+    text = short;
+  }
+  const slot = PIN_SLOTS.find(k => !S.teams[S.team]?.pins?.[note.q]?.[k]);
+  if (!slot) return toast(`이 질문은 전지에 ${PIN_MAX}장까지 붙일 수 있어요. 하나를 떼고 붙여 주세요`);
+  try {
+    await store.set(`teams/${S.team}/pins/${note.q}/${slot}`, { note: noteId, text, ts: now(), by: uid });
+  } catch {
+    toast('방금 다른 사람이 먼저 붙여서 자리가 찼어요. 목록을 보고 다시 해 주세요');
+  }
 }
 
 // ── 합의 문장: 팀마다 a1·a2·a3 세 자리만 있다 (규칙에서도 같은 자리만 허용) ──
@@ -481,10 +547,9 @@ function buildPoster() {
         <label>팀 <select id="pTeam">${teamList().map(t => `<option value="${esc(t.id)}" ${t.id === S.posterTeam ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
         <label>합의 글씨 <select id="pAgreeFont">${Object.entries(AGREE_FONTS).map(([k, f]) => `<option value="${k}" ${k === S.agreeFont ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label>
         <label><input type="checkbox" id="pNotes" ${S.posterNotes ? 'checked' : ''}> 포스트잇 넣기</label>
-        <label>칸마다 <select id="pLimit">${[4, 6, 8, 10, 14, 99].map(n => `<option value="${n}" ${n === S.posterLimit ? 'selected' : ''}>${n === 99 ? '전부' : n + '장'}</option>`).join('')}</select></label>
         <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
         <button class="btn" id="pPrint">인쇄 창으로 보기</button>
-        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 공감(♥)이 많은 포스트잇부터 들어가요.</p>
+        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 포스트잇은 팀이 📌로 고른 것(질문마다 ${PIN_MAX}장까지)만 들어가요.</p>
       </div>
       <div class="poster-frame" id="pFrame"><div class="poster-scale" id="pScale"></div></div>
     </section>`);
@@ -494,9 +559,10 @@ function buildPoster() {
   const withAgreeFont = () => document.fonts.load(`80px ${AGREE_FONTS[S.agreeFont].family}`, '가').catch(() => {}).then(updatePoster);
   $('#pAgreeFont').onchange = e => { S.agreeFont = e.target.value; saved.set('ws-agree-font', S.agreeFont); updatePoster(); withAgreeFont(); };
   withAgreeFont();
-  $('#pLimit').onchange = e => { S.posterLimit = +e.target.value; updatePoster(); };
   $('#pPrint').onclick = () => {
-    $('#poster-print').innerHTML = posterHtml(S.posterTeam);
+    const holder = measuredPoster(S.posterTeam);
+    $('#poster-print').innerHTML = holder.innerHTML;
+    holder.remove();
     // PDF로 저장할 때 파일 이름이 페이지 제목을 따라간다 → 경영팀_프로그램_그로스팀.pdf
     const title = document.title;
     document.title = posterFileName();
@@ -532,11 +598,7 @@ async function saveOutlinePdf() {
   const btn = $('#pOutline');
   const label = btn.textContent;
   btn.disabled = true;
-  // 줄이지 않은 실제 크기 전지를 화면 밖에 그려서 위치를 잰다
-  const holder = document.createElement('div');
-  holder.className = 'poster-measure';
-  holder.innerHTML = posterHtml(S.posterTeam);
-  document.body.appendChild(holder);
+  const holder = measuredPoster(S.posterTeam);
   try {
     const { outlinePdf } = await import('./outline-pdf.js');
     const { blob, missing } = await outlinePdf(holder.firstElementChild, msg => { btn.textContent = msg; });
@@ -556,6 +618,16 @@ async function saveOutlinePdf() {
   }
 }
 
+// 줄이지 않은 실제 크기 전지를 화면 밖에 그리고 포스트잇 크기까지 맞춘다 (PDF·인쇄용). 다 쓰면 remove()
+function measuredPoster(teamId) {
+  const holder = document.createElement('div');
+  holder.className = 'poster-measure';
+  holder.innerHTML = posterHtml(teamId);
+  document.body.appendChild(holder);
+  fitStickies(holder.firstElementChild);
+  return holder;
+}
+
 // 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
 const STICKY_MAX = 52, STICKY_MIN = 24;
 function fitStickies(poster) {
@@ -568,7 +640,6 @@ function fitStickies(poster) {
     size -= 2;
     poster.style.setProperty('--sticky', size + 'pt');
   }
-  S.posterFont = size;
 }
 
 function fitPoster() {
@@ -579,7 +650,10 @@ function fitPoster() {
   box.style.transform = `scale(${scale})`;
   frame.style.height = poster.offsetHeight * scale + 'px';
 }
-window.addEventListener('resize', fitPoster);
+window.addEventListener('resize', () => {
+  fitPoster();
+  if (S.built.startsWith('board:')) renderLivePreview();
+});
 
 function posterHtml(teamId) {
   const t = teamOf(teamId);
@@ -587,11 +661,10 @@ function posterHtml(teamId) {
   const d = S.teams[teamId] || {};
   const c = S.meta.company || {};
   const agree = sortAgree(listOf(d.agree));
-  const notes = listOf(d.notes);
   const members = listOf(d.members).sort((a, b) => a.ts - b.ts);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   return `
-    <div class="poster" style="--sticky:${S.posterFont || STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
+    <div class="poster" style="--sticky:${STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>우리 이렇게 일하자</h1>
       <div class="p-missions">
         <div class="p-m"><b>${esc(c.name || '에고이즘')}의 미션</b><p>${br(c.mission)}</p>${c.goal ? `<b>목표</b><p class="sm">${br(c.goal)}</p>` : ''}</div>
@@ -609,7 +682,8 @@ function posterHtml(teamId) {
         ${QUESTIONS.map((q, i) => `
           <div class="p-col">
             <div class="p-q"><span>${i + 1}</span>${esc(q.text)}</div>
-            <div class="p-stickies">${sortNotes(notes.filter(n => n.q === q.id)).slice(0, S.posterLimit).map(n => `<div class="p-sticky ${q.id}">${br(n.text)}</div>`).join('')}</div>
+            <div class="p-stickies">${pinsOf(teamId, q.id).map(p => `<div class="p-sticky ${q.id}">${br(p.text)}</div>`).join('')
+              || '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'}</div>
           </div>`).join('')}
       </div>` : '<div class="p-spacer"></div>'}
       <div class="p-sign"><b>함께한 사람</b>${members.map(m => `<span>${esc(m.name)}</span>`).join('')}</div>
@@ -716,18 +790,26 @@ async function seedSample() {
     if (!teamOf(tid)) continue;
     (s.members || []).forEach((name, i) => { up[`${tid}/members/s${i}`] = { name, ts: t0 + i, sample: true }; });
     for (const q of QUESTIONS) {
-      (s[q.id] || []).forEach(([text, likes = 0], i) => {
+      const list = s[q.id] || [];
+      list.forEach(([text, likes = 0], i) => {
         const l = {};
         for (let k = 0; k < likes; k++) l['s' + k] = true;
         up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
       });
+      // 공감 많은 순으로 전지에 붙여 둔다
+      list.map(([text, likes = 0], i) => ({ text, likes, i }))
+        .sort((a, b) => b.likes - a.likes)
+        .slice(0, PIN_MAX)
+        .forEach((p, k) => {
+          up[`${tid}/pins/${q.id}/${PIN_SLOTS[k]}`] = { note: `s_${q.id}_${p.i}`, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
+        });
     }
     (s.agree || []).slice(0, AGREE_MAX).forEach((text, i) => {
       up[`${tid}/agree/${AGREE_SLOTS[i]}`] = { text: text.slice(0, AGREE_LEN), name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
   }
   await save(store.update('teams', up));
-  toast('샘플을 넣었어요. A1 출력 탭에서 확인해 보세요');
+  toast('샘플을 넣었어요. 팀 전지 오른쪽 미리보기나 A1 출력 탭에서 확인해 보세요');
 }
 
 async function clearSample() {
@@ -736,6 +818,9 @@ async function clearSample() {
   for (const [tid, d] of Object.entries(S.teams)) {
     for (const part of ['notes', 'agree', 'members']) {
       for (const [id, v] of Object.entries(d[part] || {})) if (v?.sample) up[`${tid}/${part}/${id}`] = null;
+    }
+    for (const [q, slots] of Object.entries(d.pins || {})) {
+      for (const [slot, v] of Object.entries(slots || {})) if (v?.sample) up[`${tid}/pins/${q}/${slot}`] = null;
     }
   }
   if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
@@ -785,12 +870,29 @@ document.addEventListener('click', async e => {
       return;
     case 'edit': {
       const text = await editText('포스트잇 고치기', note?.text || '');
-      if (text) save(store.set(`${teamPath}/notes/${noteId}/text`, text));
+      if (!text) return;
+      save(store.set(`${teamPath}/notes/${noteId}/text`, text));
+      // 전지에 붙어 있고 전지 글이 원래 포스트잇과 같았다면 전지 글도 같이 고친다
+      const slot = pinSlotOf(S.team, note.q, noteId);
+      const pin = slot && S.teams[S.team].pins[note.q][slot];
+      if (pin && pin.text === note.text) {
+        if (text.length <= PIN_LEN) save(store.set(`${teamPath}/pins/${note.q}/${slot}/text`, text));
+        else toast(`전지에는 ${PIN_LEN}자까지라 전지에 붙은 글은 그대로예요. 바꾸려면 떼고 다시 붙여 주세요`);
+      }
       return;
     }
     case 'del':
-      if (confirm('이 포스트잇을 지울까요?')) save(store.remove(`${teamPath}/notes/${noteId}`));
+      if (confirm('이 포스트잇을 지울까요?')) {
+        const slot = pinSlotOf(S.team, note?.q, noteId);
+        if (slot) save(store.remove(`${teamPath}/pins/${note.q}/${slot}`));
+        save(store.remove(`${teamPath}/notes/${noteId}`));
+      }
       return;
+    case 'pin':
+      if (note) await pinNote(note, noteId);
+      return;
+    case 'unpin':
+      return save(store.remove(`${teamPath}/pins/${note.q}/${el.dataset.slot}`));
 
     case 'agree-edit': {
       const a = S.teams[S.team]?.agree?.[agreeId];

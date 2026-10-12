@@ -84,7 +84,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .adminbar b { margin-right: 6px; color: var(--warn); }
 .adminbar .sep { flex: 1; }
 
-main { padding: 24px; max-width: 1480px; margin: 0 auto; }
+main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 
 /* 들어가기 */
 .join { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
@@ -130,8 +130,9 @@ main { padding: 24px; max-width: 1480px; margin: 0 auto; }
 .note.q1 { background: var(--q1); } .note.q2 { background: var(--q2); } .note.q3 { background: var(--q3); }
 .note.mine { outline: 2px solid rgba(31, 29, 26, .18); }
 .note-text { font-family: var(--hand); font-size: 20px; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
-.note-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; }
-.note-foot .by { color: var(--ink-2); font-weight: 500; margin-right: auto; }
+.note-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 6px; font-size: 12px; }
+.note-foot .by { color: var(--ink-2); font-weight: 500; flex-basis: 100%; }
+.note-foot button { white-space: nowrap; }
 .like { border: 0; background: rgba(255,255,255,.6); border-radius: 99px; padding: 1px 8px; cursor: pointer; color: var(--ink-3); font-size: 12px; }
 .like.on { color: var(--bad); background: #fff; font-weight: 700; }
 @keyframes pop { from { transform: scale(.94); opacity: 0; } }
@@ -147,6 +148,22 @@ main { padding: 24px; max-width: 1480px; margin: 0 auto; }
 .agree li:hover .aact, .agree li:focus-within .aact { opacity: 1; }
 .signers { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
 .sign { font-family: var(--hand); font-size: 19px; }
+
+/* 전지에 붙일 포스트잇 (📌) */
+.pin-count { font-size: 13px; color: var(--ink-2); background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.pin-count b { color: var(--ink); }
+.note.pinned { outline: 3px solid var(--ink); }
+.pin-badge { display: inline-block; font-size: 11px; font-weight: 700; background: var(--ink); color: #fff; border-radius: 99px; padding: 1px 8px; margin-bottom: 4px; }
+.pin-text { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.pin { border: 1px solid rgba(31,29,26,.25); background: rgba(255,255,255,.7); border-radius: 99px; padding: 1px 9px; cursor: pointer; font-size: 12px; color: var(--ink); }
+.pin.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.pin:disabled { opacity: .35; cursor: not-allowed; }
+
+/* 팀 전지 + 오른쪽 A1 미리보기 */
+.board-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.live-preview { position: sticky; top: 16px; background: var(--paper); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+.lp-head { display: flex; flex-direction: column; gap: 2px; }
+.lp-head b { font-size: 15px; }
 
 /* 지금 단계 강조 */
 .focus { box-shadow: 0 0 0 3px var(--accent), var(--shadow) !important; }
@@ -236,6 +253,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-q span { flex: none; width: 20mm; height: 20mm; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 28pt; margin-top: 1mm; }
 .p-stickies { display: flex; flex-direction: column; gap: 4mm; }
 .p-sticky { padding: 4mm 7mm; font-family: var(--hand); font-size: var(--sticky, 44pt); line-height: 1.22; border-radius: 1mm 1mm 1mm 6mm; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12); }
+.p-empty { border: .8mm dashed var(--ink-3); border-radius: 4mm; padding: 8mm; font-size: 24pt; color: var(--ink-3); text-align: center; }
 .p-sticky.q1 { background: var(--q1); } .p-sticky.q2 { background: var(--q2); } .p-sticky.q3 { background: var(--q3); }
 .p-sign { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2mm 9mm; border-top: 1.2mm solid var(--ink); padding-top: 6mm; }
 .p-sign b { font-size: 26pt; color: var(--ink-2); margin-right: 4mm; }
@@ -251,6 +269,8 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 
 /* 노트북 화면이 좁을 때 */
 @media (max-width: 1100px) {
+  .board-wrap { grid-template-columns: 1fr; }
+  .live-preview { position: static; max-width: 420px; }
   .cols { grid-template-columns: 1fr; }
   .poster-view { grid-template-columns: 1fr; }
   .poster-controls { position: static; }
