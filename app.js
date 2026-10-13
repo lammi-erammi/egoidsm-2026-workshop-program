@@ -405,6 +405,7 @@ function buildBoard() {
         ${QUESTIONS.map((q, i) => `
           <div class="col ${q.id}" data-focus="${q.id}">
             <div class="col-head"><span class="qnum">${i + 1}</span><p>${esc(q.text)}</p></div>
+            ${i === 0 ? '<div id="gapBox"></div>' : ''}
             <div class="pin-count" id="pins-${q.id}"></div>
             <form class="composer" data-q="${q.id}">
               <textarea rows="2" maxlength="500" placeholder="${esc(q.hint || '생각을 적고 Enter')} — Enter로 붙이기"></textarea>
@@ -416,8 +417,9 @@ function buildBoard() {
       <div class="paper" data-focus="plan">
         <div class="paper-head">
           <h2>${esc(PLAN.title)}</h2>
-          <p>실행안 포스트잇의 <b>‘계획으로’</b>를 누르거나 아래에 직접 적어요. <b>${PLAN.max}개까지</b>, ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
+          <p>실행안 포스트잇의 <b>‘계획으로’</b>를 누르거나 아래에 직접 적어요. ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
         </div>
+        <div class="pin-count" id="planCount"></div>
         <ol class="plan" id="plan"></ol>
         <form class="plan-composer" id="planComposer">
           ${PLAN.fields.map(f => `
@@ -466,6 +468,26 @@ function questOf(teamId) {
   const target = +q.target, actual = +q.actual || 0;
   return { target, actual, rate: actual / target * 100, left: Math.max(0, target - actual), shared: !own };
 }
+// 걸림돌 찾기용 월 평균: 지금까지 월 평균(달성÷지난 달 수), 필요했던 월 평균(목표÷12), 남은 기간 필요한 월 평균
+// 지난 달 수는 미션 편집의 '기준'(예: 9월)에서 숫자를 읽는다
+function monthlyOf(teamId) {
+  const q = questOf(teamId);
+  const m = parseInt(String(S.meta?.questAsOf || '').match(/\d+/)?.[0], 10);
+  if (!q || !(m >= 1 && m <= 12)) return null;
+  return { months: m, avg: q.actual / m, need: q.target / 12, needLeft: m < 12 ? q.left / (12 - m) : null, rest: 12 - m };
+}
+function monthlyHtml(teamId, cls = '') {
+  const mo = monthlyOf(teamId);
+  if (!mo) return '';
+  const short = mo.avg < mo.need;
+  return `
+    <div class="gap-box ${cls}">
+      <div><span>지금까지 월 평균 (${mo.months}개월)</span><b class="${short ? 'bad' : 'good'}">${fmtEok(mo.avg)}</b></div>
+      <div><span>달성하려면 필요했던 월 평균</span><b>${fmtEok(mo.need)}</b></div>
+      ${mo.needLeft != null ? `<div><span>남은 ${mo.rest}개월 동안 필요한 월 평균</span><b>${fmtEok(mo.needLeft)}</b></div>` : ''}
+    </div>`;
+}
+
 function questHtml(q, cls = '') {
   if (!q) return '';
   const asOf = S.meta?.questAsOf ? `${esc(S.meta.questAsOf)}까지` : '지금까지';
@@ -512,6 +534,7 @@ function updateBoard() {
     online.map(p => `<span class="chip ${p.id === uid ? 'me' : ''}">${esc(p.name)}</span>`).join('');
 
   $('#missions').innerHTML = companyCard(c) + teamCard(team);
+  if ($('#gapBox')) $('#gapBox').innerHTML = monthlyHtml(S.team);
 
   const notes = notesOf(S.team);
   for (const q of QUESTIONS) {
@@ -529,21 +552,32 @@ function updateBoard() {
   }
 
   const plans = plansOf(S.team);
+  const onPoster = posterPlansOf(S.team);
+  const posterFull = onPoster.length >= PLAN.posterMax;
+  $('#planCount').innerHTML = `계획 <b>${plans.length}/${PLAN.max}</b> · 🖼 전지에 넣은 계획 <b>${onPoster.length}/${PLAN.posterMax}</b>` +
+    (posterFull ? ' <span class="lbl">— 바꾸려면 하나를 빼 주세요</span>' : '');
   $('#plan').innerHTML = plans.length
-    ? plans.map((p, i) => `
-      <li data-id="${esc(p.id)}">
+    ? plans.map((p, i) => {
+      const on = onPoster.some(x => x.id === p.id);
+      return `
+      <li data-id="${esc(p.id)}" class="${on ? 'on-poster' : ''}">
         <span class="pn">${i + 1}</span>
         <div class="pbody">
+          ${on ? '<span class="pin-badge">🖼 전지에 들어감</span>' : ''}
           <div class="pwhat">${esc(p.what)}</div>
           <div class="pmeta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
         </div>
         <span class="aact">
+          ${on
+            ? '<button class="pin on" data-act="plan-poster" title="A1 전지에서 빼기">🖼 빼기</button>'
+            : `<button class="pin" data-act="plan-poster" ${posterFull ? `disabled title="전지에는 ${PLAN.posterMax}개까지예요"` : 'title="A1 전지에 넣기"'}>🖼 전지에 넣기</button>`}
           <button class="icon" data-act="plan-up" ${i === 0 ? 'disabled' : ''} title="위로">▲</button>
           <button class="icon" data-act="plan-down" ${i === plans.length - 1 ? 'disabled' : ''} title="아래로">▼</button>
           <button class="link" data-act="plan-edit">고치기</button>
           <button class="link" data-act="plan-del">지우기</button>
         </span>
-      </li>`).join('')
+      </li>`;
+    }).join('')
     : '<li class="empty">아직 실행 계획이 없어요</li>';
 
   // 다 차면 입력 칸을 막는다
@@ -656,11 +690,13 @@ async function pinNote(note, noteId) {
   }
 }
 
-// ── 12월까지 실행 계획: 팀마다 r1~r5 다섯 자리만 있다 (규칙에서도 같은 자리만 허용) ──
+// ── 12월까지 실행 계획: 팀마다 r1~r20 자리만 있다 (규칙에서도 같은 자리만 허용) ──
 // 한 줄 = 실행안·담당·기한·확인할 숫자. 네 칸이 모두 찬 줄만 쓴다.
+// onPoster 가 켜진 줄만 A1 전지에 들어간다 (posterMax 개까지, 넘치면 순서상 앞의 것만)
 const PLAN_SLOTS = Array.from({ length: PLAN.max }, (_, i) => 'r' + (i + 1));
 const isPlan = p => p && PLAN.fields.every(f => typeof p[f.key] === 'string' && p[f.key].trim());
 const plansOf = teamId => listOf(S.teams[teamId]?.plan).filter(isPlan).sort((a, b) => (a.order ?? a.ts) - (b.order ?? b.ts));
+const posterPlansOf = teamId => plansOf(teamId).filter(p => p.onPoster).slice(0, PLAN.posterMax);
 
 // 실행 계획 입력 창: 네 칸을 채우면 값, 취소하면 null
 function planDialog(title, values = {}) {
@@ -693,8 +729,10 @@ async function addPlan(values, from) {
   const slot = PLAN_SLOTS.find(k => !used[k]);
   if (!slot) { toast(`실행 계획은 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
   const ts = now();
+  // 전지 자리가 남아 있으면 처음부터 전지에 넣어 둔다 (나중에 🖼로 빼거나 바꿀 수 있다)
+  const onPoster = posterPlansOf(S.team).length < PLAN.posterMax;
   try {
-    await store.set(`teams/${S.team}/plan/${slot}`, { ...values, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
+    await store.set(`teams/${S.team}/plan/${slot}`, { ...values, onPoster, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
     return true;
   } catch {
     toast('방금 다른 사람이 먼저 써서 자리가 찼어요. 목록을 보고 다시 해 주세요');
@@ -729,13 +767,15 @@ function updateAll() {
   grid.innerHTML = teamList().map(t => {
     const d = S.teams[t.id] || {};
     const notes = notesOf(t.id);
-    const plans = plansOf(t.id);
+    const all = plansOf(t.id);
+    const plans = posterPlansOf(t.id);
     const online = teamOnline(t.id).length;
     return `
       <article class="tcard ${t.id === me.team ? 'mine' : ''}">
         <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}${+t.expected ? ' / ' + t.expected : ''}명</span></header>
         <div class="counts">${QUESTIONS.map((q, i) => `<span class="cnt ${q.id}" title="${esc(q.text)}">${i + 1}. ${notes.filter(n => n.q === q.id).length}장</span>`).join('')}</div>
-        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">실행 계획 없음</li>'}</ol>
+        <div class="lbl">실행 계획 ${all.length}개 · 전지에 ${plans.length}개</div>
+        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">전지에 넣은 실행 계획 없음</li>'}</ol>
         <button class="btn sm" data-act="open-team" data-team="${esc(t.id)}">전지 보기</button>
       </article>`;
   }).join('');
@@ -850,7 +890,7 @@ function posterHtml(teamId) {
   const t = teamOf(teamId);
   if (!t) return '<div class="poster"></div>';
   const c = S.meta.company || {};
-  const plans = plansOf(teamId);
+  const plans = posterPlansOf(teamId);
   const members = membersOf(teamId);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   const cq = questOf(''), tq = questOf(teamId);
@@ -877,7 +917,7 @@ function posterHtml(teamId) {
               <span class="p-n">${i + 1}</span>
               <div><div class="p-what">${esc(p.what)}</div>
               <div class="p-meta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
-            </li>`).join('') || '<li class="empty">실행 계획을 채워 주세요</li>'}
+            </li>`).join('') || '<li class="empty">🖼 전지에 넣을 실행 계획을 골라 주세요</li>'}
         </ol>
       </div>
       ${S.posterNotes ? `
@@ -885,6 +925,7 @@ function posterHtml(teamId) {
         ${QUESTIONS.map((q, i) => `
           <div class="p-col">
             <div class="p-q"><span>${i + 1}</span>${esc(q.poster || q.short)}</div>
+            ${i === 0 ? monthlyHtml(teamId, 'p-gap') : ''}
             <div class="p-stickies">${pinsOf(teamId, q.id).map(p => `<div class="p-sticky ${q.id}">${br(p.text)}</div>`).join('')
               || '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'}</div>
           </div>`).join('')}
@@ -1032,10 +1073,12 @@ async function seedSample() {
     // 실행 계획도 빈 자리에만. 샘플 한 줄 = [실행안, 담당, 기한, 확인할 숫자]
     const usedPlan = S.teams[tid]?.plan || {};
     const freePlan = PLAN_SLOTS.filter(k => !usedPlan[k]);
+    let posterRoom = PLAN.posterMax - posterPlansOf(tid).length;
     (s.plan || []).slice(0, freePlan.length).forEach((row, i) => {
       const v = {};
       PLAN.fields.forEach((f, k) => { v[f.key] = String(row[k] || '').slice(0, f.max); });
-      if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
+      const onPoster = posterRoom-- > 0;
+      if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, onPoster, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
   }
   try {
@@ -1086,7 +1129,7 @@ function teamRow(t) {
 
 // ── 클릭·입력 처리 ──────────────────────────────────────────
 // 참가자는 자기 팀 전지만 고칠 수 있다 (다른 팀 전지는 '전체 팀'에서 구경만). 진행자는 모든 팀
-const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'plan-edit', 'plan-del', 'plan-up', 'plan-down']);
+const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'plan-edit', 'plan-del', 'plan-up', 'plan-down', 'plan-poster']);
 const canEditTeam = () => S.admin || S.team === me.team;
 
 document.addEventListener('click', async e => {
@@ -1159,6 +1202,13 @@ document.addEventListener('click', async e => {
       if (!v) return;
       if (!S.teams[S.team]?.plan?.[planId]) return toast('그사이 이 계획이 지워졌어요');
       return save(store.update(`${teamPath}/plan/${planId}`, v));
+    }
+    case 'plan-poster': {
+      const p = S.teams[S.team]?.plan?.[planId];
+      if (!p) return;
+      const on = posterPlansOf(S.team).some(x => x.id === planId);
+      if (!on && posterPlansOf(S.team).length >= PLAN.posterMax) return toast(`전지에는 ${PLAN.posterMax}개까지 넣을 수 있어요. 하나를 빼고 넣어 주세요`);
+      return save(store.update(`${teamPath}/plan/${planId}`, { onPoster: !on }));
     }
     case 'plan-del':
       if (planId && confirm('이 실행 계획을 지울까요?')) save(store.remove(`${teamPath}/plan/${planId}`));

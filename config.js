@@ -42,9 +42,9 @@ export const EVENT = {
 export const AGENDA = [
   { title: '접속 안내', minutes: 2, focus: '', desc: '핸드폰으로 들어와 이름과 팀을 골라요' },
   { title: '오프닝', minutes: 3, focus: 'mission', desc: '미션과 2026 팀퀘스트 목표, 지금 달성률을 함께 봐요' },
-  { title: '걸림돌 찾기', minutes: 10, focus: 'q1', silent: 3, desc: '목표까지 남은 차이가 생긴 가장 큰 원인은?', ask: '숫자로 보면 어디에서 차이가 벌어졌나요?' },
+  { title: '걸림돌 찾기', minutes: 10, focus: 'q1', silent: 3, desc: '목표까지 남은 차이가 생긴 가장 큰 원인은?', ask: '목표 매출과 차이가 발생한 가장 큰 원인은 무엇인가요?' },
   { title: '전략·계획', minutes: 15, focus: 'q2', silent: 3, desc: '12월까지 미션과 목표를 달성하려면 어떻게 해야 할까?', ask: '남은 기간, 무엇에 집중하고 무엇을 멈출까요?' },
-  { title: '구체적 실행안', minutes: 15, focus: 'q3', silent: 3, desc: '높은 성과를 내려면 어떻게 일해야 할까?', ask: '그래서 다음 주 월요일에 누가 무엇을 하나요?' },
+  { title: '구체적 실행안', minutes: 15, focus: 'q3', silent: 3, desc: '높은 성과를 내려면 어떻게 일해야 할까?', ask: '내일부터 실행할 구체적인 실행안이 무엇인가요?' },
   { title: '실행 계획 확정', minutes: 10, focus: 'plan', desc: '실행안을 골라 담당·기한·확인할 숫자까지 채워요', ask: '12월 31일에 무엇을 보면 해냈다고 말할 수 있나요?' }
 ];
 
@@ -61,10 +61,12 @@ export const QUESTIONS = [
     hint: "예: '소통 강화' 말고 '매주 월 10시 재고·판매 15분 점검'처럼" }
 ];
 
-// 5) 마지막 단계 '12월까지 실행 계획' (A1 전지 가운데에 크게 들어간다)
+// 5) 마지막 단계 '12월까지 실행 계획'
+//    max = 팀마다 쓸 수 있는 줄 수, posterMax = 그중 A1 전지에 넣을 수 있는 줄 수(이보다 많으면 전지가 넘친다)
 export const PLAN = {
   title: '12월까지 실행 계획',
-  max: 5,
+  max: 20,
+  posterMax: 5,
   fields: [
     { key: 'what', label: '실행안', max: 40, hint: '예: 재구매 고객 대상 쿠폰 실험' },
     { key: 'who', label: '담당', max: 20, hint: '예: 홍길동' },
