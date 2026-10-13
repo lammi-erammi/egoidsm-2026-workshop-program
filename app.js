@@ -468,7 +468,7 @@ function questOf(teamId) {
   const target = +q.target, actual = +q.actual || 0;
   return { target, actual, rate: actual / target * 100, left: Math.max(0, target - actual), shared: !own };
 }
-// 걸림돌 찾기용 월 평균: 지금까지 월 평균(달성÷지난 달 수), 필요했던 월 평균(목표÷12), 남은 기간 필요한 월 평균
+// 원인 분석용 월 평균: 지금까지 월 평균(달성÷지난 달 수), 필요했던 월 평균(목표÷12), 남은 기간 필요한 월 평균
 // 지난 달 수는 미션 편집의 '기준'(예: 9월)에서 숫자를 읽는다
 function monthlyOf(teamId) {
   const q = questOf(teamId);
@@ -476,7 +476,7 @@ function monthlyOf(teamId) {
   if (!q || !(m >= 1 && m <= 12)) return null;
   return { months: m, avg: q.actual / m, need: q.target / 12, needLeft: m < 12 ? q.left / (12 - m) : null, rest: 12 - m };
 }
-// part 'past' = 걸림돌 찾기(지금까지·필요했던 월 평균), 'left' = 12월까지 할 일(남은 기간 필요한 월 평균)
+// part 'past' = 원인 분석(지금까지·필요했던 월 평균), 'left' = 12월까지 할 일(남은 기간 필요한 월 평균)
 function monthlyHtml(teamId, part, cls = '') {
   const mo = monthlyOf(teamId);
   if (!mo) return '';
@@ -804,8 +804,8 @@ function buildPoster() {
     </section>`);
   $('#pTeam').onchange = e => { S.posterTeam = e.target.value; updatePoster(); };
   $('#pNotes').onchange = e => { S.posterNotes = e.target.checked; updatePoster(); };
-  // 손글씨 글꼴이 다 받아진 뒤에 다시 그려야 포스트잇 칸 높이가 맞는다
-  document.fonts.load("80px 'Poor Story'", '가').catch(() => {}).then(updatePoster);
+  // 글꼴이 다 받아진 뒤에 다시 그려야 포스트잇 칸 높이가 맞는다
+  Promise.all([document.fonts.load("700 80px Pretendard", '가'), document.fonts.load("80px 'Poor Story'", '가')]).catch(() => {}).then(updatePoster);
   $('#pPrint').onclick = () => {
     const holder = measuredPoster(S.posterTeam);
     $('#poster-print').innerHTML = holder.innerHTML;
@@ -867,7 +867,7 @@ function measuredPoster(teamId) {
 }
 
 // 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
-const STICKY_MAX = 52, STICKY_MIN = 24;
+const STICKY_MAX = 44, STICKY_MIN = 22;
 function fitStickies(poster) {
   const cols = poster ? [...poster.querySelectorAll('.p-col')] : [];
   if (!cols.length) return;

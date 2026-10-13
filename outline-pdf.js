@@ -9,9 +9,8 @@ const FONT_FILES = {
   sans500: PRETENDARD('Medium'),
   sans700: PRETENDARD('Bold'),
   sans900: PRETENDARD('Black'),
-  hand: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumpenscript/NanumPenScript-Regular.ttf',
-  poorstory: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poorstory/PoorStory-Regular.ttf',
-  himelody: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/himelody/HiMelody-Regular.ttf'
+  // '함께한 사람' 이름 손글씨
+  poorstory: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poorstory/PoorStory-Regular.ttf'
 };
 
 let fontsLoading = null;
@@ -34,8 +33,6 @@ function loadFonts() {
 
 function pickFont(fonts, cs) {
   if (/Poor Story/i.test(cs.fontFamily)) return fonts.poorstory;
-  if (/Hi Melody/i.test(cs.fontFamily)) return fonts.himelody;
-  if (/Nanum Pen/i.test(cs.fontFamily)) return fonts.hand;
   const w = parseInt(cs.fontWeight, 10) || 400;
   return w >= 800 ? fonts.sans900 : w >= 650 ? fonts.sans700 : w >= 450 ? fonts.sans500 : fonts.sans400;
 }
@@ -174,7 +171,7 @@ export async function outlinePdf(posterEl, onStep = () => {}) {
         if (r && r.width) {
           let f = font, glyph = font.charToGlyph(ch);
           if (!glyph || glyph.index === 0) {
-            f = [fonts.sans500, fonts.hand].find(o => o.charToGlyph(ch)?.index > 0) || font;
+            f = [fonts.sans500, fonts.poorstory].find(o => o.charToGlyph(ch)?.index > 0) || font;
             glyph = f.charToGlyph(ch);
             if (!glyph || glyph.index === 0) missing++;
           }

@@ -16,7 +16,7 @@
   --q3: #cdf0dd;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(31, 29, 26, .06), 0 4px 14px rgba(31, 29, 26, .06);
-  --hand: 'Poor Story', cursive; /* 포스트잇·합의 문장·이름 손글씨 (outline-pdf.js 글꼴 파일과 같아야 함) */
+  --hand: 'Poor Story', cursive; /* '함께한 사람' 이름만 손글씨 (outline-pdf.js 글꼴 파일과 같아야 함) */
   /* 아웃라인 PDF(outline-pdf.js)가 같은 글꼴 파일로 글자를 그리므로 바꿀 때는 둘 다 바꾼다 */
   --sans: 'Pretendard', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
 }
@@ -129,7 +129,7 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 .note { padding: 12px 14px 8px; border-radius: 4px 4px 4px 14px; box-shadow: 0 1px 1px rgba(0,0,0,.06), 0 3px 8px rgba(0,0,0,.06); animation: pop .25s ease-out; }
 .note.q1 { background: var(--q1); } .note.q2 { background: var(--q2); } .note.q3 { background: var(--q3); }
 .note.mine { outline: 2px solid rgba(31, 29, 26, .18); }
-.note-text { font-family: var(--hand); font-size: 20px; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; }
+.note-text { font-family: var(--sans); font-size: 16px; font-weight: 500; line-height: 1.45; word-break: keep-all; overflow-wrap: anywhere; }
 .note-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 6px; font-size: 12px; }
 .note-foot .by { color: var(--ink-2); font-weight: 500; flex-basis: 100%; }
 .note-foot button { white-space: nowrap; }
@@ -177,7 +177,7 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 .plan li.empty { color: var(--ink-3); font-size: 13px; }
 .plan .pn { flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 900; }
 .plan .pbody { flex: 1; min-width: 0; }
-.plan .pwhat { font-family: var(--hand); font-size: 24px; line-height: 1.25; word-break: keep-all; overflow-wrap: anywhere; }
+.plan .pwhat { font-family: var(--sans); font-size: 17px; font-weight: 700; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
 .plan .pmeta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); margin-top: 4px; }
 .plan .pmeta b { color: var(--ink); }
 .plan-composer { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr auto; gap: 8px; align-items: end; }
@@ -189,7 +189,7 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 .plan li.on-poster { background: #fff8f0; border-radius: 10px; padding-left: 8px; padding-right: 8px; }
 .plan .aact { flex-wrap: wrap; justify-content: flex-end; }
 
-/* 걸림돌 찾기: 월 평균 */
+/* 원인 분석: 월 평균 */
 .gap-box { background: var(--bg); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .gap-box > div { display: flex; justify-content: space-between; gap: 10px; }
 .gap-box span { color: var(--ink-2); }
@@ -345,7 +345,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-plan li > div { min-width: 0; flex: 1; }
 .p-plan li.empty { font-size: 24pt; color: var(--ink-3); }
 .p-plan .p-n { width: 17mm; height: 17mm; font-size: 28pt; margin-top: 1.5mm; }
-.p-what { font-family: var(--hand); font-size: 46pt; line-height: 1.1; word-break: keep-all; overflow-wrap: anywhere; }
+.p-what { font-family: var(--sans); font-size: 38pt; font-weight: 700; letter-spacing: -.5pt; line-height: 1.22; word-break: keep-all; overflow-wrap: anywhere; }
 .p-meta { display: flex; flex-wrap: wrap; gap: 1mm 8mm; font-size: 21pt; color: var(--ink-2); margin-top: 1mm; }
 .p-meta b { color: var(--ink); }
 .p-n { flex: none; width: 24mm; height: 24mm; border-radius: 50%; background: var(--c); color: #fff; display: grid; place-items: center; font-family: var(--sans); font-weight: 900; font-size: 40pt; }
@@ -356,7 +356,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-q { font-size: 42pt; font-weight: 700; line-height: 1.25; letter-spacing: -.5pt; display: flex; gap: 4mm; word-break: keep-all; overflow-wrap: anywhere; }
 .p-q span { flex: none; width: 20mm; height: 20mm; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 28pt; margin-top: 1mm; }
 .p-stickies { display: flex; flex-direction: column; gap: 4mm; }
-.p-sticky { padding: 4mm 7mm; font-family: var(--hand); font-size: var(--sticky, 44pt); line-height: 1.22; border-radius: 1mm 1mm 1mm 6mm; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12); }
+.p-sticky { padding: 4mm 7mm; font-family: var(--sans); font-weight: 500; letter-spacing: -.3pt; font-size: var(--sticky, 40pt); line-height: 1.3; border-radius: 1mm 1mm 1mm 6mm; word-break: keep-all; overflow-wrap: anywhere; box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12); }
 .p-empty { border: .8mm dashed var(--ink-3); border-radius: 4mm; padding: 8mm; font-size: 24pt; color: var(--ink-3); text-align: center; }
 .p-sticky.q1 { background: var(--q1); } .p-sticky.q2 { background: var(--q2); } .p-sticky.q3 { background: var(--q3); }
 .p-sign { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2mm 9mm; border-top: 1.2mm solid var(--ink); padding-top: 6mm; }

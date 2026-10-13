@@ -42,7 +42,7 @@ export const EVENT = {
 export const AGENDA = [
   { title: '접속 안내', minutes: 2, focus: '', desc: '핸드폰으로 들어와 이름과 팀을 골라요' },
   { title: '오프닝', minutes: 3, focus: 'mission', desc: '미션과 2026 팀퀘스트 목표, 지금 달성률을 함께 봐요' },
-  { title: '걸림돌 찾기', minutes: 10, focus: 'q1', silent: 3, desc: '목표까지 남은 차이가 생긴 가장 큰 원인은?', ask: '목표 매출과 차이가 발생한 가장 큰 원인은 무엇인가요?' },
+  { title: '원인 분석', minutes: 10, focus: 'q1', silent: 3, desc: '목표까지 남은 차이가 생긴 가장 큰 원인은?', ask: '목표 매출과 차이가 발생한 가장 큰 원인은 무엇인가요?' },
   { title: '전략·계획', minutes: 15, focus: 'q2', silent: 3, desc: '12월까지 미션과 목표를 달성하려면 무엇을 해야 할까?', ask: '남은 기간, 무엇에 집중하고 무엇을 멈출까요?' },
   { title: '구체적 실행안', minutes: 15, focus: 'q3', silent: 3, desc: '그것을 달성하려면 어떻게 해야 할까?', ask: '내일부터 실행할 구체적인 실행안이 무엇인가요?' },
   { title: '실행 계획 확정', minutes: 10, focus: 'plan', desc: '실행안을 골라 담당·기한·확인할 숫자까지 채워요', ask: '12월 31일에 무엇을 보면 해냈다고 말할 수 있나요?' }
@@ -50,7 +50,7 @@ export const AGENDA = [
 
 // 4) 질문 세 개 (포스트잇 칸). poster = A1 전지에 들어갈 짧은 제목, hint = 입력 칸 예시
 export const QUESTIONS = [
-  { id: 'q1', short: '걸림돌 찾기', poster: '목표까지의 걸림돌',
+  { id: 'q1', short: '원인 분석', poster: '원인 분석',
     text: '목표까지 남은 차이가 생긴 가장 큰 원인은 무엇일까?',
     hint: '예: 신제품 출시가 2달 늦어져 3분기 매출이 빠졌다' },
   { id: 'q2', short: '전략·계획', poster: '12월까지의 전략·계획',
