@@ -872,6 +872,16 @@ const PLAN_MAX = 54, PLAN_MIN = 40, PLAN_ROOM_MM = 215;
 const STICKY_MAX = 36, STICKY_MIN = 20;
 function fitStickies(poster) {
   if (!poster) return;
+  // 0) 제목(팀 이름 + 목표 달성 실행 계획)은 한 줄. 팀 이름이 길어 넘칠 때만 줄인다
+  const title = poster.querySelector('.p-title');
+  if (title) {
+    let size = 96;
+    poster.style.setProperty('--title', size + 'pt');
+    while (size > 60 && title.scrollWidth > title.clientWidth + 1) {
+      size -= 4;
+      poster.style.setProperty('--title', size + 'pt');
+    }
+  }
   const notes = poster.querySelector('.p-notes');
   if (notes) {
     const mm = poster.offsetWidth / 596;
