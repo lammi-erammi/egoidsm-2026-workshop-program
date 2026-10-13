@@ -1141,6 +1141,10 @@ async function clearSample() {
         if (v?.sample || d.notes?.[v?.note]?.sample) up[`${tid}/pins/${q}/${slot}`] = null;
       }
     }
+    // 샘플 포스트잇에서 만든 실행 계획도 같이 (포스트잇을 지우면 그 계획도 지우는 것과 같은 기준)
+    for (const [id, p] of Object.entries(d.plan || {})) {
+      if (!p?.sample && p?.from && d.notes?.[p.from]?.sample) up[`${tid}/plan/${id}`] = null;
+    }
   }
   if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
   if (await save(store.update('teams', up))) toast('샘플을 지웠어요');
@@ -1218,12 +1222,19 @@ document.addEventListener('click', async e => {
       return save(store.update(teamPath, up));
     }
     case 'del': {
-      if (!note || !confirm('이 포스트잇을 지울까요?')) return;
-      // 포스트잇과 전지 자리를 한 번에 지운다 (둘 중 하나만 지워지는 일이 없게)
+      if (!note) return;
+      // 이 포스트잇으로 만든 실행 계획도 같이 지운다 (지우기 전에 알려 준다)
+      const linkedPlans = Object.entries(S.teams[S.team]?.plan || {}).filter(([, p]) => p?.from === noteId);
+      const msg = linkedPlans.length
+        ? `이 포스트잇을 지울까요?\n이 포스트잇으로 만든 실행 계획 ${linkedPlans.length}개도 함께 지워져요.`
+        : '이 포스트잇을 지울까요?';
+      if (!confirm(msg)) return;
+      // 포스트잇·전지 자리·실행 계획을 한 번에 지운다 (일부만 지워지는 일이 없게)
       const up = { [`notes/${noteId}`]: null };
       for (const slot of PIN_SLOTS) {
         if (S.teams[S.team]?.pins?.[note.q]?.[slot]?.note === noteId) up[`pins/${note.q}/${slot}`] = null;
       }
+      for (const [id] of linkedPlans) up[`plan/${id}`] = null;
       return save(store.update(teamPath, up));
     }
     case 'pin':
