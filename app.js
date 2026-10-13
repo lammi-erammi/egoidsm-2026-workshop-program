@@ -868,8 +868,8 @@ function measuredPoster(teamId) {
 
 // 1) 실행 계획 글씨: 크게 쓰되, 아래 포스트잇 칸이 PLAN_ROOM_MM 보다 좁아지면 조금씩 줄인다
 // 2) 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
-const PLAN_MAX = 54, PLAN_MIN = 40, PLAN_ROOM_MM = 230;
-const STICKY_MAX = 44, STICKY_MIN = 22;
+const PLAN_MAX = 54, PLAN_MIN = 40, PLAN_ROOM_MM = 215;
+const STICKY_MAX = 36, STICKY_MIN = 20;
 function fitStickies(poster) {
   if (!poster) return;
   const notes = poster.querySelector('.p-notes');
@@ -884,7 +884,9 @@ function fitStickies(poster) {
   }
   const cols = [...poster.querySelectorAll('.p-col')];
   if (!cols.length) return;
-  const fits = () => cols.every(c => c.scrollHeight <= c.clientHeight + 1);
+  // 칸이 넘치지 않고, 포스트잇 한 장 한 장 안에서도 글이 넘치지 않는 크기
+  const stickies = [...poster.querySelectorAll('.p-sticky')];
+  const fits = () => cols.every(c => c.scrollHeight <= c.clientHeight + 1) && stickies.every(s => s.scrollHeight <= s.clientHeight + 1);
   let size = STICKY_MAX;
   poster.style.setProperty('--sticky', size + 'pt');
   while (size > STICKY_MIN && !fits()) {
@@ -945,9 +947,15 @@ function posterHtml(teamId) {
         ${QUESTIONS.map((q, i) => `
           <div class="p-col">
             <div class="p-q"><span>${i + 1}</span>${esc(q.poster || q.short)}</div>
-            ${i === 0 ? monthlyHtml(teamId, 'past', 'p-gap') : i === 1 ? monthlyHtml(teamId, 'left', 'p-gap') : ''}
-            <div class="p-stickies">${pinsOf(teamId, q.id).map(p => `<div class="p-sticky ${q.id}">${br(p.text)}</div>`).join('')
-              || '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'}</div>
+            <div class="p-gapslot">${i === 0 ? monthlyHtml(teamId, 'past', 'p-gap') : i === 1 ? monthlyHtml(teamId, 'left', 'p-gap') : ''}</div>
+            <div class="p-stickies">${(() => {
+              // 질문마다 PIN_MAX 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
+              const pins = pinsOf(teamId, q.id);
+              if (!pins.length) return '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>';
+              return PIN_SLOTS.map((_, k) => pins[k]
+                ? `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span></div>`
+                : '<div class="p-slot"></div>').join('');
+            })()}</div>
           </div>`).join('')}
       </div>` : '<div class="p-spacer"></div>'}
       <div class="p-sign"><b>함께한 사람</b>${members.map(m => `<span>${esc(m.name)}</span>`).join('')}</div>
