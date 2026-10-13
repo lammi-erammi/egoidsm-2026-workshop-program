@@ -405,7 +405,7 @@ function buildBoard() {
         ${QUESTIONS.map((q, i) => `
           <div class="col ${q.id}" data-focus="${q.id}">
             <div class="col-head"><span class="qnum">${i + 1}</span><p>${esc(q.text)}</p></div>
-            ${i === 0 ? '<div id="gapBox"></div>' : ''}
+            ${i < 2 ? `<div id="gapBox-${q.id}"></div>` : ''}
             <div class="pin-count" id="pins-${q.id}"></div>
             <form class="composer" data-q="${q.id}">
               <textarea rows="2" maxlength="500" placeholder="${esc(q.hint || '생각을 적고 Enter')} — Enter로 붙이기"></textarea>
@@ -476,15 +476,21 @@ function monthlyOf(teamId) {
   if (!q || !(m >= 1 && m <= 12)) return null;
   return { months: m, avg: q.actual / m, need: q.target / 12, needLeft: m < 12 ? q.left / (12 - m) : null, rest: 12 - m };
 }
-function monthlyHtml(teamId, cls = '') {
+// part 'past' = 걸림돌 찾기(지금까지·필요했던 월 평균), 'left' = 12월까지 할 일(남은 기간 필요한 월 평균)
+function monthlyHtml(teamId, part, cls = '') {
   const mo = monthlyOf(teamId);
   if (!mo) return '';
+  if (part === 'left') {
+    return mo.needLeft == null ? '' : `
+      <div class="gap-box ${cls}">
+        <div><span>남은 ${mo.rest}개월 동안 필요한 월 평균</span><b class="bad">${fmtEok(mo.needLeft)}</b></div>
+      </div>`;
+  }
   const short = mo.avg < mo.need;
   return `
     <div class="gap-box ${cls}">
       <div><span>지금까지 월 평균 (${mo.months}개월)</span><b class="${short ? 'bad' : 'good'}">${fmtEok(mo.avg)}</b></div>
       <div><span>달성하려면 필요했던 월 평균</span><b>${fmtEok(mo.need)}</b></div>
-      ${mo.needLeft != null ? `<div><span>남은 ${mo.rest}개월 동안 필요한 월 평균</span><b>${fmtEok(mo.needLeft)}</b></div>` : ''}
     </div>`;
 }
 
@@ -534,7 +540,8 @@ function updateBoard() {
     online.map(p => `<span class="chip ${p.id === uid ? 'me' : ''}">${esc(p.name)}</span>`).join('');
 
   $('#missions').innerHTML = companyCard(c) + teamCard(team);
-  if ($('#gapBox')) $('#gapBox').innerHTML = monthlyHtml(S.team);
+  if ($('#gapBox-q1')) $('#gapBox-q1').innerHTML = monthlyHtml(S.team, 'past');
+  if ($('#gapBox-q2')) $('#gapBox-q2').innerHTML = monthlyHtml(S.team, 'left');
 
   const notes = notesOf(S.team);
   for (const q of QUESTIONS) {
@@ -925,7 +932,7 @@ function posterHtml(teamId) {
         ${QUESTIONS.map((q, i) => `
           <div class="p-col">
             <div class="p-q"><span>${i + 1}</span>${esc(q.poster || q.short)}</div>
-            ${i === 0 ? monthlyHtml(teamId, 'p-gap') : ''}
+            ${i === 0 ? monthlyHtml(teamId, 'past', 'p-gap') : i === 1 ? monthlyHtml(teamId, 'left', 'p-gap') : ''}
             <div class="p-stickies">${pinsOf(teamId, q.id).map(p => `<div class="p-sticky ${q.id}">${br(p.text)}</div>`).join('')
               || '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'}</div>
           </div>`).join('')}
