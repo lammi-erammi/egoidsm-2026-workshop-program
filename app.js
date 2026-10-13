@@ -524,7 +524,7 @@ function teamCard(t) {
       ${t.deptMission ? `<h4>${esc(t.dept || '부서')} 미션</h4><p class="big">${br(t.deptMission)}</p>` : ''}
       ${t.mission ? `<h4>${t.deptMission ? '팀 미션' : '미션'}</h4><p class="${t.deptMission ? 'mid' : 'big'}">${br(t.mission)}</p>` : ''}
       ${!any ? '<p class="empty">미션이 아직 없어요</p>' : ''}
-      ${q && q.shared ? '<p class="q-shared">목표: 회사 팀퀘스트를 함께 달성해요</p>' : questHtml(q)}
+      ${questHtml(q)}
     </div>`;
 }
 
@@ -913,7 +913,7 @@ function posterHtml(teamId) {
           ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
-          ${tq && tq.shared ? '<p class="p-shared">목표: 회사 팀퀘스트를 함께 달성</p>' : questHtml(tq, 'p-quest')}
+          ${questHtml(tq, 'p-quest')}
         </div>
       </div>
       <div class="p-plan">
