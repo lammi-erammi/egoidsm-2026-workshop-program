@@ -320,7 +320,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
    안전 영역 = 작업 영역 기준 51mm 안쪽. 글자·상자는 안전 영역에서 2mm 더 안쪽(53mm)에 둔다. 배경은 끝까지 채운다. */
 .poster { width: 596mm; height: 842mm; background: #fffdf8; color: var(--ink); padding: 53mm; display: flex; flex-direction: column; gap: 10mm; font-family: var(--sans); overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .p-top { display: flex; justify-content: space-between; font-size: 30pt; color: var(--ink-2); font-weight: 700; border-bottom: 1.2mm solid var(--ink); padding-bottom: 6mm; }
-.p-title { font-size: var(--title, 96pt); font-weight: 900; letter-spacing: -3pt; line-height: 1.05; white-space: nowrap; overflow: hidden; }
+.p-title { font-size: var(--title, 96pt); font-weight: 900; letter-spacing: -3pt; line-height: 1.05; white-space: nowrap; overflow: hidden; margin-bottom: 5mm; } /* 미션 박스와의 간격 10+5=15mm */
 .p-team { color: var(--accent); margin-right: .3em; } /* 팀 이름과 제목을 한 줄, 같은 크기로 */
 .p-missions { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
 .p-m { border: 1mm solid var(--ink); border-radius: 6mm; padding: 7mm 9mm; }
