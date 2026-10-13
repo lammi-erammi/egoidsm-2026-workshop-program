@@ -340,7 +340,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 /* 12월까지 실행 계획 (A1 가운데) */
 .p-plan { flex: none; }
 .p-plan h2 { font-size: 48pt; font-weight: 900; margin-bottom: 6mm; letter-spacing: -.5pt; }
-.p-plan ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11mm; }
+.p-plan ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8mm; }
 .p-plan li { display: flex; align-items: flex-start; gap: 7mm; }
 .p-plan li > div { min-width: 0; flex: 1; }
 .p-plan li.empty { font-size: 24pt; color: var(--ink-3); }
