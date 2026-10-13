@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>우리 이렇게 일하자</title>
+<title>목표 달성 실행 계획</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Poor+Story&family=Hi+Melody&display=swap" rel="stylesheet">
@@ -21,6 +21,18 @@
     <textarea id="editText" rows="5" maxlength="500"></textarea>
     <div class="dialog-actions">
       <button value="cancel" class="btn ghost">취소</button>
+      <button value="ok" class="btn primary">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="planDialog">
+  <form method="dialog" class="dialog-body" id="planForm">
+    <h3 id="planTitle">실행 계획</h3>
+    <p class="sub">네 칸을 모두 채워야 전지에 올라가요. '누가, 언제까지, 어떤 숫자로'가 분명할수록 좋아요.</p>
+    <div id="planFields" class="plan-fields"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" onclick="this.closest('dialog').close()">취소</button>
       <button value="ok" class="btn primary">저장</button>
     </div>
   </form>

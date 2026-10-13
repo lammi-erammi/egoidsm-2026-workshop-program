@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS } from './config.js';
+import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN } from './config.js';
 
 // ── 기본 도구 ───────────────────────────────────────────────
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -24,7 +24,7 @@ const S = {
   meta: undefined, teams: {}, stage: null, presence: {},
   online: true, offset: 0,
   view: 'board', team: me.team, joining: false,
-  posterTeam: '', posterNotes: true, agreeFont: saved.get('ws-agree-font'),
+  posterTeam: '', posterNotes: true,
   built: ''
 };
 let store;
@@ -211,6 +211,11 @@ function renderHeader() {
         <div id="timer" class="timer">--:--</div>
       </div>
     </div>
+    ${step != null && (AGENDA[step]?.ask || AGENDA[step]?.silent) ? `
+    <div class="stage-ask">
+      <span class="mode" id="stageMode"></span>
+      ${AGENDA[step].ask ? `<span class="ask">💬 ${esc(AGENDA[step].ask)}</span>` : ''}
+    </div>` : ''}
     ${!S.online ? '<div class="offline">인터넷 연결이 끊겼어요. 다시 연결되면 적은 내용이 자동으로 올라가요.</div>' : ''}
     ${S.admin ? `
     <div class="adminbar">
@@ -236,6 +241,19 @@ function tick() {
   if (st?.endsAt) left = st.endsAt - now();
   else if (st?.pausedLeft != null) left = st.pausedLeft;
   if (left == null) { el.textContent = '--:--'; el.className = 'timer'; return; }
+  // 단계 시작 뒤 처음 몇 분은 '혼자 쓰기', 그다음은 '함께 이야기'
+  const mode = $('#stageMode'), a = AGENDA[st.step];
+  if (mode && a?.silent) {
+    const soloLeft = left - (a.minutes - a.silent) * 60000;
+    if (soloLeft > 0) {
+      const s = Math.ceil(soloLeft / 1000);
+      mode.textContent = `🤫 혼자 쓰는 시간 ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      mode.className = 'mode solo';
+    } else {
+      mode.textContent = '🗣 함께 이야기하고 📌 고르기';
+      mode.className = 'mode talk';
+    }
+  }
   const over = left < 0;
   const sec = Math.floor(Math.abs(left) / 1000);
   const t = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
@@ -309,8 +327,9 @@ async function openJoinOverlay() {
 function renderJoinOverlay() {
   const ov = $('#joinOverlay');
   if (!ov || ov.hidden || !S.meta) return;
-  const counts = teamList().map(t => ({ name: t.name, n: listOf(S.presence[t.id]).length, exp: +t.expected || 0 }));
-  const total = counts.reduce((sum, c) => sum + c.n, 0);
+  // 팀 집계에서 뺄 이름(예: 아무 팀에나 들어가는 정균님)은 팀 숫자에서만 빼고 전체 접속에는 센다
+  const counts = teamList().map(t => ({ name: t.name, n: teamOnline(t.id).length, exp: +t.expected || 0 }));
+  const total = Object.values(S.presence).reduce((sum, p) => sum + Object.keys(p || {}).length, 0);
   const expected = +S.meta.expected || counts.reduce((sum, c) => sum + c.exp, 0);
   $('#joTotal').textContent = total;
   $('#joExpected').textContent = expected ? `/ ${expected}명` : '명';
@@ -325,6 +344,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $('#joinOverlay') && !$('#joinOverlay').hidden) $('#joinOverlay').hidden = true;
 });
 
+const uncountedNames = () => new Set((S.meta?.uncounted || []).map(n => String(n).trim()).filter(Boolean));
+const teamOnline = teamId => {
+  const skip = uncountedNames();
+  return listOf(S.presence[teamId]).filter(p => !skip.has(String(p.name || '').trim()));
+};
+
 // ── 들어가기 (이름·팀 고르기) ───────────────────────────────
 function buildJoin() {
   const teams = teamList();
@@ -332,7 +357,7 @@ function buildJoin() {
   app.innerHTML = `
     <div class="join"><div class="join-card">
       <p class="eyebrow">${esc(EVENT.title)} · ${esc(EVENT.program)}</p>
-      <h1>우리 이렇게 일하자</h1>
+      <h1>목표 달성 실행 계획</h1>
       <p class="sub">이름과 팀을 고르면 우리 팀 전지가 열려요. 팀원이 적는 내용이 바로바로 보여요.</p>
       <label class="field">이름<input id="joinName" maxlength="20" placeholder="예: 김예람" value="${esc(me.name)}"></label>
       <div class="field">우리 팀</div>
@@ -382,22 +407,24 @@ function buildBoard() {
             <div class="col-head"><span class="qnum">${i + 1}</span><p>${esc(q.text)}</p></div>
             <div class="pin-count" id="pins-${q.id}"></div>
             <form class="composer" data-q="${q.id}">
-              <textarea rows="2" maxlength="500" placeholder="생각을 적고 Enter (줄바꿈은 Shift+Enter)"></textarea>
+              <textarea rows="2" maxlength="500" placeholder="${esc(q.hint || '생각을 적고 Enter')} — Enter로 붙이기"></textarea>
               <button class="btn primary">붙이기</button>
             </form>
             <div class="notes" id="notes-${q.id}"></div>
           </div>`).join('')}
       </div>
-      <div class="paper" data-focus="agree">
+      <div class="paper" data-focus="plan">
         <div class="paper-head">
-          <h2>우리 이렇게 일하자</h2>
-          <p>포스트잇의 <b>‘합의로’</b>를 누르거나 직접 적어요. <b>${AGREE_MAX}개까지, 한 문장 ${AGREE_LEN}자까지</b> 쓸 수 있어요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
+          <h2>${esc(PLAN.title)}</h2>
+          <p>실행안 포스트잇의 <b>‘계획으로’</b>를 누르거나 아래에 직접 적어요. <b>${PLAN.max}개까지</b>, ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. 이 칸이 A1 전지 가운데에 크게 들어가요.</p>
         </div>
-        <ol class="agree" id="agree"></ol>
-        <form class="composer agree-composer">
-          <input maxlength="${AGREE_LEN}" placeholder="팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)">
-          <span class="count" id="agreeCount">0/${AGREE_LEN}</span>
-          <button class="btn primary">전지에 쓰기</button>
+        <ol class="plan" id="plan"></ol>
+        <form class="plan-composer" id="planComposer">
+          ${PLAN.fields.map(f => `
+            <label class="pf pf-${f.key}"><span>${esc(f.label)}</span>
+              <input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}" required>
+            </label>`).join('')}
+          <button class="btn primary">계획에 넣기</button>
         </form>
         <div class="signers" id="signers"></div>
       </div>
@@ -427,27 +454,49 @@ function renderLivePreview() {
 }
 
 const sortNotes = arr => arr.sort((a, b) => Object.keys(b.likes || {}).length - Object.keys(a.likes || {}).length || a.ts - b.ts);
-const sortAgree = arr => arr.sort((a, b) => (a.order ?? a.ts) - (b.order ?? b.ts));
+
+// ── 목표 = 2026 팀퀘스트 (미션 편집에서 숫자를 고친다) ──
+// meta.quests.company = 회사 목표(운영부서·그로스·CEO실도 같은 목표), meta.quests[팀 id] = 브랜드처럼 따로 목표가 있는 팀
+const fmtEok = v => `${(Math.round(v * 10) / 10).toLocaleString('ko-KR')}억`;
+function questOf(teamId) {
+  const qs = S.meta?.quests || {};
+  const own = teamId && qs[teamId];
+  const q = own || qs.company;
+  if (!q || !(+q.target)) return null;
+  const target = +q.target, actual = +q.actual || 0;
+  return { target, actual, rate: actual / target * 100, left: Math.max(0, target - actual), shared: !own };
+}
+function questHtml(q, cls = '') {
+  if (!q) return '';
+  const asOf = S.meta?.questAsOf ? `${esc(S.meta.questAsOf)}까지` : '지금까지';
+  return `
+    <div class="quest ${cls}">
+      <div class="q-line"><b>${fmtEok(q.target)}</b><span>2026 팀퀘스트 매출 목표</span></div>
+      <div class="q-bar"><i style="width:${Math.min(100, q.rate).toFixed(1)}%"></i></div>
+      <div class="q-now">${asOf} <b>${fmtEok(q.actual)}</b> · 달성률 <b>${q.rate.toFixed(1)}%</b> · 남은 <b>${fmtEok(q.left)}</b></div>
+    </div>`;
+}
 
 function companyCard(c) {
   return `
     <div class="mcard company">
       <div class="label">회사 · ${esc(c.name || '에고이즘')}</div>
       ${c.mission ? `<h4>미션</h4><p class="big">${br(c.mission)}</p>` : '<p class="empty">미션이 아직 없어요</p>'}
-      ${c.goal ? `<h4>목표</h4><p>${br(c.goal)}</p>` : ''}
+      ${questHtml(questOf(''))}
     </div>`;
 }
 
-// 팀 카드: 부서 미션(예: 운영부서) + 팀·브랜드 미션 + 목표
+// 팀 카드: 부서 미션(예: 운영부서) + 팀·브랜드 미션 + 팀퀘스트 목표
 function teamCard(t) {
   const any = t.deptMission || t.mission;
+  const q = questOf(t.id);
   return `
     <div class="mcard team">
       <div class="label">우리 팀 · ${esc(t.name)}${t.dept ? ` (${esc(t.dept)})` : ''}</div>
       ${t.deptMission ? `<h4>${esc(t.dept || '부서')} 미션</h4><p class="big">${br(t.deptMission)}</p>` : ''}
       ${t.mission ? `<h4>${t.deptMission ? '팀 미션' : '미션'}</h4><p class="${t.deptMission ? 'mid' : 'big'}">${br(t.mission)}</p>` : ''}
       ${!any ? '<p class="empty">미션이 아직 없어요</p>' : ''}
-      ${t.goal ? `<h4>목표</h4><p>${br(t.goal)}</p>` : ''}
+      ${q && q.shared ? '<p class="q-shared">목표: 회사 팀퀘스트를 함께 달성해요</p>' : questHtml(q)}
     </div>`;
 }
 
@@ -479,28 +528,29 @@ function updateBoard() {
       : '<p class="empty">아직 붙은 포스트잇이 없어요</p>';
   }
 
-  const agree = sortAgree(listOf(data.agree));
-  $('#agree').innerHTML = agree.length
-    ? agree.map((a, i) => `
-      <li data-id="${esc(a.id)}">
-        <span class="atext">${br(a.text)}</span>
+  const plans = plansOf(S.team);
+  $('#plan').innerHTML = plans.length
+    ? plans.map((p, i) => `
+      <li data-id="${esc(p.id)}">
+        <span class="pn">${i + 1}</span>
+        <div class="pbody">
+          <div class="pwhat">${esc(p.what)}</div>
+          <div class="pmeta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
+        </div>
         <span class="aact">
-          <button class="icon" data-act="agree-up" ${i === 0 ? 'disabled' : ''} title="위로">▲</button>
-          <button class="icon" data-act="agree-down" ${i === agree.length - 1 ? 'disabled' : ''} title="아래로">▼</button>
-          <button class="link" data-act="agree-edit">고치기</button>
-          <button class="link" data-act="agree-del">지우기</button>
+          <button class="icon" data-act="plan-up" ${i === 0 ? 'disabled' : ''} title="위로">▲</button>
+          <button class="icon" data-act="plan-down" ${i === plans.length - 1 ? 'disabled' : ''} title="아래로">▼</button>
+          <button class="link" data-act="plan-edit">고치기</button>
+          <button class="link" data-act="plan-del">지우기</button>
         </span>
       </li>`).join('')
-    : '<li class="empty">아직 합의한 문장이 없어요</li>';
+    : '<li class="empty">아직 실행 계획이 없어요</li>';
 
-  // 3개가 차면 입력 칸을 막는다
-  const full = agree.length >= AGREE_MAX;
-  const input = $('.agree-composer input');
-  input.disabled = full;
-  $('.agree-composer button').disabled = full;
-  input.placeholder = full
-    ? `${AGREE_MAX}개가 다 찼어요. 바꾸려면 하나를 고치거나 지워 주세요`
-    : '팀이 합의한 문장을 적어요 (예: 결정한 건 그날 슬랙에 공유한다)';
+  // 다 차면 입력 칸을 막는다
+  const full = plans.length >= PLAN.max;
+  $('#planComposer').classList.toggle('full', full);
+  $('#planComposer').querySelectorAll('input, button').forEach(x => { x.disabled = full; });
+  $('#planComposer button').textContent = full ? `${PLAN.max}개가 다 찼어요` : '계획에 넣기';
 
   const members = membersOf(S.team);
   $('#signers').innerHTML = members.length
@@ -527,7 +577,7 @@ function noteHtml(n, pinSlot, pinsFull) {
         ${pinSlot
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
           : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 질문은 ${PIN_MAX}장이 다 찼어요"` : `title="A1 전지에 붙여요 (질문마다 ${PIN_MAX}장)"`}>📌 전지에 붙이기</button>`}
-        <button class="link" data-act="promote" title="이 내용을 '우리 이렇게 일하자' 합의 문장으로 올려요">${isPromoted(S.team, n.id) ? '합의에 있음' : '합의로'}</button>
+        <button class="link" data-act="promote" title="이 내용을 '${esc(PLAN.title)}'으로 올려요 (담당·기한·숫자를 채워요)">${isPromoted(S.team, n.id) ? '계획에 있음' : '계획으로'}</button>
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
@@ -573,8 +623,8 @@ function cleanupDeadPins(teamId) {
   }
 }
 
-// 포스트잇이 합의 문장으로 올라가 있는지는 합의 문장 쪽을 보고 판단한다 (합의 문장을 지우면 다시 올릴 수 있게)
-const isPromoted = (teamId, noteId) => listOf(S.teams[teamId]?.agree).some(a => a.from === noteId);
+// 포스트잇이 실행 계획으로 올라가 있는지는 계획 쪽을 보고 판단한다 (계획을 지우면 다시 올릴 수 있게)
+const isPromoted = (teamId, noteId) => plansOf(teamId).some(p => p.from === noteId);
 
 // 같은 사람이 핸드폰·노트북 두 곳에서 들어와도 이름은 한 번만
 function membersOf(teamId) {
@@ -606,22 +656,45 @@ async function pinNote(note, noteId) {
   }
 }
 
-// ── 합의 문장: 팀마다 a1·a2·a3 세 자리만 있다 (규칙에서도 같은 자리만 허용) ──
-const AGREE_MAX = 3, AGREE_LEN = 40;
-const AGREE_SLOTS = ['a1', 'a2', 'a3'];
+// ── 12월까지 실행 계획: 팀마다 r1~r5 다섯 자리만 있다 (규칙에서도 같은 자리만 허용) ──
+// 한 줄 = 실행안·담당·기한·확인할 숫자. 네 칸이 모두 찬 줄만 쓴다.
+const PLAN_SLOTS = Array.from({ length: PLAN.max }, (_, i) => 'r' + (i + 1));
+const isPlan = p => p && PLAN.fields.every(f => typeof p[f.key] === 'string' && p[f.key].trim());
+const plansOf = teamId => listOf(S.teams[teamId]?.plan).filter(isPlan).sort((a, b) => (a.order ?? a.ts) - (b.order ?? b.ts));
 
-async function addAgree(text, from) {
-  if (text.length > AGREE_LEN) {
-    const short = await editText(`전지에는 ${AGREE_LEN}자까지 들어가요. 줄여 주세요`, text, AGREE_LEN);
-    if (!short) return false;
-    if (short.length > AGREE_LEN) { toast(`${AGREE_LEN}자를 넘었어요 (${short.length}자)`); return false; }
-    text = short;
-  }
-  const slot = AGREE_SLOTS.find(k => !S.teams[S.team]?.agree?.[k]);
-  if (!slot) { toast(`합의 문장은 ${AGREE_MAX}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
+// 실행 계획 입력 창: 네 칸을 채우면 값, 취소하면 null
+function planDialog(title, values = {}) {
+  const d = $('#planDialog');
+  $('#planTitle').textContent = title;
+  $('#planFields').innerHTML = PLAN.fields.map(f => `
+    <label class="field">${esc(f.label)} <small>${f.max}자까지</small>
+      <input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}" value="${esc(String(values[f.key] || '').slice(0, f.max))}" required>
+    </label>`).join('');
+  d.returnValue = '';
+  return new Promise(resolve => {
+    let done = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    // '저장'을 누르는 순간 값을 받는다 (창 닫힘 신호는 브라우저 상태에 따라 늦을 수 있어서 기다리지 않음)
+    $('#planForm').onsubmit = e => {
+      if (e.submitter?.value !== 'ok') return;
+      const v = {};
+      for (const f of PLAN.fields) v[f.key] = $(`#planFields [name=${f.key}]`).value.trim().slice(0, f.max);
+      finish(isPlan(v) ? v : null);
+    };
+    d.onclose = () => finish(null);
+    d.showModal();
+    $('#planFields input')?.focus();
+  });
+}
+
+async function addPlan(values, from) {
+  if (!isPlan(values)) { toast(`${PLAN.fields.map(f => f.label).join('·')} 네 칸을 모두 채워 주세요`); return false; }
+  const used = S.teams[S.team]?.plan || {};
+  const slot = PLAN_SLOTS.find(k => !used[k]);
+  if (!slot) { toast(`실행 계획은 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
   const ts = now();
   try {
-    await store.set(`teams/${S.team}/agree/${slot}`, { text, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
+    await store.set(`teams/${S.team}/plan/${slot}`, { ...values, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
     return true;
   } catch {
     toast('방금 다른 사람이 먼저 써서 자리가 찼어요. 목록을 보고 다시 해 주세요');
@@ -636,7 +709,10 @@ function editText(title, text, maxLength = 500) {
   $('#editText').value = text;
   d.returnValue = '';
   return new Promise(resolve => {
-    d.onclose = () => resolve(d.returnValue === 'ok' ? $('#editText').value.trim() : null);
+    let done = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    d.querySelector('form').onsubmit = e => { if (e.submitter?.value === 'ok') finish($('#editText').value.trim()); };
+    d.onclose = () => finish(null);
     d.showModal();
   });
 }
@@ -653,13 +729,13 @@ function updateAll() {
   grid.innerHTML = teamList().map(t => {
     const d = S.teams[t.id] || {};
     const notes = notesOf(t.id);
-    const agree = sortAgree(listOf(d.agree));
-    const online = listOf(S.presence[t.id]).length;
+    const plans = plansOf(t.id);
+    const online = teamOnline(t.id).length;
     return `
       <article class="tcard ${t.id === me.team ? 'mine' : ''}">
         <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}${+t.expected ? ' / ' + t.expected : ''}명</span></header>
         <div class="counts">${QUESTIONS.map((q, i) => `<span class="cnt ${q.id}" title="${esc(q.text)}">${i + 1}. ${notes.filter(n => n.q === q.id).length}장</span>`).join('')}</div>
-        <ol class="mini-agree">${agree.length ? agree.map(a => `<li>${esc(a.text)}</li>`).join('') : '<li class="empty">합의 문장 없음</li>'}</ol>
+        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">실행 계획 없음</li>'}</ol>
         <button class="btn sm" data-act="open-team" data-team="${esc(t.id)}">전지 보기</button>
       </article>`;
   }).join('');
@@ -672,7 +748,6 @@ function buildPoster() {
     <section class="poster-view">
       <div class="poster-controls">
         <label>팀 <select id="pTeam">${teamList().map(t => `<option value="${esc(t.id)}" ${t.id === S.posterTeam ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label>
-        <label>합의 글씨 <select id="pAgreeFont">${Object.entries(AGREE_FONTS).map(([k, f]) => `<option value="${k}" ${k === S.agreeFont ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label>
         <label><input type="checkbox" id="pNotes" ${S.posterNotes ? 'checked' : ''}> 포스트잇 넣기</label>
         <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
         <button class="btn" id="pPrint">인쇄 창으로 보기</button>
@@ -682,10 +757,8 @@ function buildPoster() {
     </section>`);
   $('#pTeam').onchange = e => { S.posterTeam = e.target.value; updatePoster(); };
   $('#pNotes').onchange = e => { S.posterNotes = e.target.checked; updatePoster(); };
-  // 글꼴이 다 받아진 뒤에 다시 그려야 포스트잇 칸 높이가 맞는다
-  const withAgreeFont = () => document.fonts.load(`80px ${AGREE_FONTS[S.agreeFont].family}`, '가').catch(() => {}).then(updatePoster);
-  $('#pAgreeFont').onchange = e => { S.agreeFont = e.target.value; saved.set('ws-agree-font', S.agreeFont); updatePoster(); withAgreeFont(); };
-  withAgreeFont();
+  // 손글씨 글꼴이 다 받아진 뒤에 다시 그려야 포스트잇 칸 높이가 맞는다
+  document.fonts.load("80px 'Poor Story'", '가').catch(() => {}).then(updatePoster);
   $('#pPrint').onclick = () => {
     const holder = measuredPoster(S.posterTeam);
     $('#poster-print').innerHTML = holder.innerHTML;
@@ -708,15 +781,6 @@ function updatePoster() {
   fitStickies(box.firstElementChild);
   fitPoster();
 }
-
-// A1 전지의 '우리 이렇게 일하자' 문장 글씨체. 글꼴마다 폭이 달라서 크기를 따로 맞춘다.
-// (아웃라인 PDF용 글꼴 파일은 outline-pdf.js 의 FONT_FILES 에 같이 있어야 한다)
-const AGREE_FONTS = {
-  poorstory: { label: '푸어 스토리', family: "'Poor Story'", size: 80 },
-  himelody: { label: '하이멜로디', family: "'Hi Melody'", size: 80 },
-  pen: { label: '나눔손글씨 펜 (예전)', family: "'Nanum Pen Script'", size: 96 }
-};
-if (!AGREE_FONTS[S.agreeFont]) S.agreeFont = 'poorstory';
 
 const posterFileName = () => `경영팀_프로그램_${(teamOf(S.posterTeam)?.name || '').replace(/[\\/:*?"<>|\s]+/g, '')}`;
 
@@ -785,31 +849,42 @@ window.addEventListener('resize', () => {
 function posterHtml(teamId) {
   const t = teamOf(teamId);
   if (!t) return '<div class="poster"></div>';
-  const d = S.teams[teamId] || {};
   const c = S.meta.company || {};
-  const agree = sortAgree(listOf(d.agree));
+  const plans = plansOf(teamId);
   const members = membersOf(teamId);
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
+  const cq = questOf(''), tq = questOf(teamId);
   return `
-    <div class="poster" style="--sticky:${STICKY_MAX}pt;--agree-font:${AGREE_FONTS[S.agreeFont].family};--agree-size:${AGREE_FONTS[S.agreeFont].size}pt">
-      <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>우리 이렇게 일하자</h1>
+    <div class="poster" style="--sticky:${STICKY_MAX}pt">
+      <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>목표 달성 실행 계획</h1>
       <div class="p-missions">
-        <div class="p-m"><b>${esc(c.name || '에고이즘')}의 미션</b><p>${br(c.mission)}</p>${c.goal ? `<b>목표</b><p class="sm">${br(c.goal)}</p>` : ''}</div>
+        <div class="p-m">
+          <b>${esc(c.name || '에고이즘')}의 미션</b><p>${br(c.mission)}</p>
+          ${questHtml(cq, 'p-quest')}
+        </div>
         <div class="p-m">
           ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
-          ${t.goal ? `<b>목표</b><p class="sm">${br(t.goal)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
+          ${tq && tq.shared ? '<p class="p-shared">목표: 회사 팀퀘스트를 함께 달성</p>' : questHtml(tq, 'p-quest')}
         </div>
       </div>
-      <ol class="p-agree">
-        ${agree.map((a, i) => `<li style="--c:${colors[i % colors.length]}"><span class="p-n">${i + 1}</span><span>${br(a.text)}</span></li>`).join('') || '<li class="empty">합의한 문장을 적어 주세요</li>'}
-      </ol>
+      <div class="p-plan">
+        <h2>${esc(PLAN.title)}</h2>
+        <ol>
+          ${plans.map((p, i) => `
+            <li style="--c:${colors[i % colors.length]}">
+              <span class="p-n">${i + 1}</span>
+              <div><div class="p-what">${esc(p.what)}</div>
+              <div class="p-meta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
+            </li>`).join('') || '<li class="empty">실행 계획을 채워 주세요</li>'}
+        </ol>
+      </div>
       ${S.posterNotes ? `
       <div class="p-notes">
         ${QUESTIONS.map((q, i) => `
           <div class="p-col">
-            <div class="p-q"><span>${i + 1}</span>${esc(q.text)}</div>
+            <div class="p-q"><span>${i + 1}</span>${esc(q.poster || q.short)}</div>
             <div class="p-stickies">${pinsOf(teamId, q.id).map(p => `<div class="p-sticky ${q.id}">${br(p.text)}</div>`).join('')
               || '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'}</div>
           </div>`).join('')}
@@ -831,8 +906,14 @@ function buildMissionsEditor() {
         <h3>회사</h3>
         <label class="field">이름<input id="cName" value="${esc(c.name || '에고이즘')}"></label>
         <label class="field">미션<textarea id="cMission" rows="2">${esc(c.mission)}</textarea></label>
-        <label class="field">목표<textarea id="cGoal" rows="2">${esc(c.goal)}</textarea></label>
+        <div class="quest-row">
+          <label class="field">2026 팀퀘스트 목표 (억)<input id="qcTarget" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.target ?? '')}"></label>
+          <label class="field">달성 (억)<input id="qcActual" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.actual ?? '')}"></label>
+          <label class="field">기준 (예: 9월)<input id="qAsOf" value="${esc(m.questAsOf || '')}" placeholder="9월"></label>
+        </div>
+        <p class="sub">회사 목표는 운영부서·그로스·CEO실 팀에도 같이 쓰여요. 브랜드처럼 따로 목표가 있는 팀은 아래 팀 줄에 적어요. 매달 손익이 나오면 숫자만 고치고 저장하면 돼요.</p>
         <label class="field">워크샵 전체 참가 인원 (접속 현황 'n / 전체'에 쓰여요)<input id="cExpected" type="number" min="0" value="${esc(m.expected ?? '')}"></label>
+        <label class="field">팀 인원 집계에서 뺄 이름 (쉼표로 구분, 전체 접속 인원에는 들어가요)<input id="cUncounted" value="${esc((m.uncounted || []).join(', '))}" placeholder="예: 박정균"></label>
       </div>
       <div class="ed-block">
         <h3>팀 <small>순서대로 화면에 나와요</small></h3>
@@ -849,7 +930,7 @@ function buildMissionsEditor() {
       ${S.meta ? `
       <div class="ed-block">
         <h3>샘플 데이터 <small>A1 전지가 어떻게 나오는지 미리 볼 때</small></h3>
-        <p class="sub">팀마다 포스트잇·합의 문장·이름(홍길동 등 가짜 이름)을 채워요. 샘플만 골라서 지울 수 있고, 사람들이 적은 내용은 그대로 남아요.</p>
+        <p class="sub">팀마다 포스트잇·실행 계획·이름(홍길동 등 가짜 이름)을 채워요. 샘플만 골라서 지울 수 있고, 사람들이 적은 내용은 그대로 남아요.</p>
         <textarea id="sampleJson" rows="4" placeholder="sample.local.json 내용을 여기에 붙여 넣어요 (내 컴퓨터 미리보기에서는 비워 둬도 돼요)"></textarea>
         <div class="row-btns">
           <button class="btn" id="seedSample">샘플 넣기</button>
@@ -859,7 +940,7 @@ function buildMissionsEditor() {
     </section>`;
   if (S.meta) shell(body); else app.innerHTML = `<main id="main">${body}</main>`;
 
-  $('#addTeam').onclick = () => $('#teamRows').insertAdjacentHTML('beforeend', teamRow({ id: 't' + Date.now().toString(36), name: '', dept: '', deptMission: '', mission: '', goal: '' }));
+  $('#addTeam').onclick = () => $('#teamRows').insertAdjacentHTML('beforeend', teamRow({ id: 't' + Date.now().toString(36), name: '', dept: '', deptMission: '', mission: '' }));
   if (S.meta) {
     $('#seedSample').onclick = seedSample;
     $('#clearSample').onclick = clearSample;
@@ -867,20 +948,28 @@ function buildMissionsEditor() {
   $('#teamRows').onclick = e => { if (e.target.dataset.act === 'row-del' && confirm('이 팀을 목록에서 뺄까요? (이미 적은 포스트잇은 저장소에 남아요)')) e.target.closest('.trow').remove(); };
   $('#saveMeta').onclick = async () => {
     const teams = {};
+    const quests = {};
+    const num = el => (el.value.trim() === '' ? null : +el.value);
+    if (num($('#qcTarget'))) quests.company = { target: num($('#qcTarget')), actual: num($('#qcActual')) || 0 };
     app.querySelectorAll('.trow').forEach((r, i) => {
       const name = $('.tName', r).value.trim();
-      if (name) teams[r.dataset.id] = {
+      if (!name) return;
+      teams[r.dataset.id] = {
         name, order: i,
         expected: +$('.tExpected', r).value || 0,
         dept: $('.tDept', r).value.trim(),
         deptMission: $('.tDeptMission', r).value.trim(),
-        mission: $('.tMission', r).value.trim(),
-        goal: $('.tGoal', r).value.trim()
+        mission: $('.tMission', r).value.trim()
       };
+      const target = num($('.tqTarget', r));
+      if (target) quests[r.dataset.id] = { target, actual: num($('.tqActual', r)) || 0 };
     });
     const ok = await save(store.set('meta', {
       expected: +$('#cExpected').value || 0,
-      company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim(), goal: $('#cGoal').value.trim() },
+      uncounted: $('#cUncounted').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
+      questAsOf: $('#qAsOf').value.trim(),
+      quests,
+      company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim() },
       teams
     }));
     if (ok) toast('저장했어요');
@@ -940,11 +1029,13 @@ async function seedSample() {
           up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
         });
     }
-    // 합의 문장도 빈 자리에만
-    const usedAgree = S.teams[tid]?.agree || {};
-    const freeAgree = AGREE_SLOTS.filter(k => !usedAgree[k]);
-    (s.agree || []).slice(0, freeAgree.length).forEach((text, i) => {
-      up[`${tid}/agree/${freeAgree[i]}`] = { text: text.slice(0, AGREE_LEN), name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
+    // 실행 계획도 빈 자리에만. 샘플 한 줄 = [실행안, 담당, 기한, 확인할 숫자]
+    const usedPlan = S.teams[tid]?.plan || {};
+    const freePlan = PLAN_SLOTS.filter(k => !usedPlan[k]);
+    (s.plan || []).slice(0, freePlan.length).forEach((row, i) => {
+      const v = {};
+      PLAN.fields.forEach((f, k) => { v[f.key] = String(row[k] || '').slice(0, f.max); });
+      if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
   }
   try {
@@ -960,7 +1051,7 @@ async function clearSample() {
   if (!confirm('샘플로 넣은 내용만 지울까요? (사람들이 적은 내용은 남아요)')) return;
   const up = {};
   for (const [tid, d] of Object.entries(S.teams)) {
-    for (const part of ['notes', 'agree', 'members']) {
+    for (const part of ['notes', 'plan', 'agree', 'members']) {
       for (const [id, v] of Object.entries(d[part] || {})) if (v?.sample) up[`${tid}/${part}/${id}`] = null;
     }
     for (const [q, slots] of Object.entries(d.pins || {})) {
@@ -984,14 +1075,18 @@ function teamRow(t) {
       </div>
       <textarea class="tDeptMission" rows="2" placeholder="부서 미션">${esc(t.deptMission)}</textarea>
       <textarea class="tMission" rows="2" placeholder="팀·브랜드 미션 (없으면 비워 두기)">${esc(t.mission)}</textarea>
-      <textarea class="tGoal" rows="2" placeholder="팀 목표 (없으면 비워 두기)">${esc(t.goal)}</textarea>
+      <div class="tcol">
+        <label class="tExp">팀퀘스트 목표 <input class="tqTarget" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.target ?? '')}">억</label>
+        <label class="tExp">달성 <input class="tqActual" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.actual ?? '')}">억</label>
+        <span class="lbl">비우면 회사 목표와 같아요</span>
+      </div>
       <button class="link" data-act="row-del">빼기</button>
     </div>`;
 }
 
 // ── 클릭·입력 처리 ──────────────────────────────────────────
 // 참가자는 자기 팀 전지만 고칠 수 있다 (다른 팀 전지는 '전체 팀'에서 구경만). 진행자는 모든 팀
-const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'agree-edit', 'agree-del', 'agree-up', 'agree-down']);
+const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'plan-edit', 'plan-del', 'plan-up', 'plan-down']);
 const canEditTeam = () => S.admin || S.team === me.team;
 
 document.addEventListener('click', async e => {
@@ -1005,7 +1100,7 @@ document.addEventListener('click', async e => {
   if (EDIT_ACTS.has(act) && !canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
   const teamPath = `teams/${S.team}`;
   const noteId = el.closest('.note')?.dataset.id;
-  const agreeId = el.closest('#agree li')?.dataset.id;
+  const planId = el.closest('#plan li')?.dataset.id;
   const note = noteId && isNote(S.teams[S.team]?.notes?.[noteId]) ? S.teams[S.team].notes[noteId] : null;
 
   switch (act) {
@@ -1018,10 +1113,13 @@ document.addEventListener('click', async e => {
     case 'like':
       if (!note) return;
       return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note.likes?.[uid] ? null : true));
-    case 'promote':
+    case 'promote': {
       if (!note || isPromoted(S.team, noteId)) return;
-      await addAgree(note.text, noteId);
+      if (plansOf(S.team).length >= PLAN.max) return toast(`실행 계획은 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`);
+      const v = await planDialog('실행 계획으로 올리기', { what: note.text });
+      if (v) await addPlan(v, noteId);
       return;
+    }
     case 'edit': {
       if (!note) return;
       const before = note.text;
@@ -1054,27 +1152,25 @@ document.addEventListener('click', async e => {
       if (!note) return;
       return save(store.remove(`${teamPath}/pins/${note.q}/${el.dataset.slot}`));
 
-    case 'agree-edit': {
-      const a = S.teams[S.team]?.agree?.[agreeId];
-      if (!a) return;
-      const text = await editText(`전지 문장 고치기 (${AGREE_LEN}자까지)`, a.text || '', AGREE_LEN);
-      if (!text || text === a.text) return;
-      if (!S.teams[S.team]?.agree?.[agreeId]) return toast('그사이 이 문장이 지워졌어요');
-      if (text.length > AGREE_LEN) toast(`${AGREE_LEN}자를 넘었어요 (${text.length}자)`);
-      else save(store.set(`${teamPath}/agree/${agreeId}/text`, text));
-      return;
+    case 'plan-edit': {
+      const p = S.teams[S.team]?.plan?.[planId];
+      if (!p) return;
+      const v = await planDialog('실행 계획 고치기', p);
+      if (!v) return;
+      if (!S.teams[S.team]?.plan?.[planId]) return toast('그사이 이 계획이 지워졌어요');
+      return save(store.update(`${teamPath}/plan/${planId}`, v));
     }
-    case 'agree-del':
-      if (confirm('전지에서 이 문장을 지울까요?')) save(store.remove(`${teamPath}/agree/${agreeId}`));
+    case 'plan-del':
+      if (planId && confirm('이 실행 계획을 지울까요?')) save(store.remove(`${teamPath}/plan/${planId}`));
       return;
-    case 'agree-up':
-    case 'agree-down': {
-      const list = sortAgree(listOf(S.teams[S.team]?.agree));
-      const i = list.findIndex(a => a.id === agreeId);
-      const j = act === 'agree-up' ? i - 1 : i + 1;
+    case 'plan-up':
+    case 'plan-down': {
+      const list = plansOf(S.team);
+      const i = list.findIndex(p => p.id === planId);
+      const j = act === 'plan-up' ? i - 1 : i + 1;
       if (i < 0 || !list[j]) return;
       const oi = list[i].order ?? list[i].ts, oj = list[j].order ?? list[j].ts;
-      return save(store.update(`${teamPath}/agree`, { [`${list[i].id}/order`]: oj, [`${list[j].id}/order`]: oi === oj ? oi + 1 : oi }));
+      return save(store.update(`${teamPath}/plan`, { [`${list[i].id}/order`]: oj, [`${list[j].id}/order`]: oi === oj ? oi + 1 : oi }));
     }
 
     // 진행자 타이머
@@ -1127,6 +1223,16 @@ function backup() {
 }
 
 document.addEventListener('submit', e => {
+  // 실행 계획 직접 입력 (네 칸 모두 required 라서 빈칸이면 브라우저가 먼저 막는다)
+  if (e.target.id === 'planComposer') {
+    e.preventDefault();
+    if (!S.team) return;
+    if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
+    const form = e.target, v = {};
+    for (const f of PLAN.fields) v[f.key] = form.elements[f.key].value.trim();
+    addPlan(v).then(ok => { if (ok) { form.reset(); form.elements[PLAN.fields[0].key].focus(); } });
+    return;
+  }
   const form = e.target.closest('.composer');
   if (!form) return;
   e.preventDefault();
@@ -1134,22 +1240,10 @@ document.addEventListener('submit', e => {
   const text = input.value.trim();
   if (!text || !S.team) return;
   if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
-  if (form.classList.contains('agree-composer')) {
-    addAgree(text).then(ok => { if (ok) { input.value = ''; updateCount(); } });
-    return;
-  } else {
-    store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now() });
-  }
+  store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now() });
   input.value = '';
   input.focus();
 });
-
-// 합의 문장 글자 수 표시 (예: 12/40)
-function updateCount() {
-  const input = $('.agree-composer input'), count = $('#agreeCount');
-  if (input && count) count.textContent = `${input.value.length}/${AGREE_LEN}`;
-}
-document.addEventListener('input', e => { if (e.target.matches('.agree-composer input')) updateCount(); });
 
 // 포스트잇 칸: Enter = 붙이기, Shift+Enter = 줄바꿈 (한글 입력 중 Enter는 무시)
 document.addEventListener('keydown', e => {
