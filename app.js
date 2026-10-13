@@ -866,10 +866,23 @@ function measuredPoster(teamId) {
   return holder;
 }
 
-// 포스트잇 글씨를 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
+// 1) 실행 계획 글씨: 크게 쓰되, 아래 포스트잇 칸이 PLAN_ROOM_MM 보다 좁아지면 조금씩 줄인다
+// 2) 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
+const PLAN_MAX = 54, PLAN_MIN = 40, PLAN_ROOM_MM = 230;
 const STICKY_MAX = 44, STICKY_MIN = 22;
 function fitStickies(poster) {
-  const cols = poster ? [...poster.querySelectorAll('.p-col')] : [];
+  if (!poster) return;
+  const notes = poster.querySelector('.p-notes');
+  if (notes) {
+    const mm = poster.offsetWidth / 596;
+    let size = PLAN_MAX;
+    poster.style.setProperty('--plan', size + 'pt');
+    while (size > PLAN_MIN && notes.offsetHeight < PLAN_ROOM_MM * mm) {
+      size -= 2;
+      poster.style.setProperty('--plan', size + 'pt');
+    }
+  }
+  const cols = [...poster.querySelectorAll('.p-col')];
   if (!cols.length) return;
   const fits = () => cols.every(c => c.scrollHeight <= c.clientHeight + 1);
   let size = STICKY_MAX;
@@ -902,7 +915,7 @@ function posterHtml(teamId) {
   const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
   const cq = questOf(''), tq = questOf(teamId);
   return `
-    <div class="poster" style="--sticky:${STICKY_MAX}pt">
+    <div class="poster" style="--sticky:${STICKY_MAX}pt;--plan:${PLAN_MAX}pt">
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>목표 달성 실행 계획</h1>
       <div class="p-missions">
         <div class="p-m">
