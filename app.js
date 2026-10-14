@@ -413,12 +413,13 @@ function openGuide(i) {
       </div>
       <p class="gd-goal">🎯 ${esc(g.goal)}</p>
       <div class="gd-phases" id="gdTimer" data-step="${i}">
-        ${phasesOf(a).map(p => `
-          <div class="gd-phase ${p.key}" data-phase="${p.key}">
+        ${phasesOf(a).map((p, k) => `
+          <div class="gd-phase ${p.key}" data-phase="${p.key}" data-act="phase-jump" data-step="${i}" data-k="${k}" title="눌러서 이 구간부터 타이머 시작">
             <div class="gd-ph-head"><b>${esc(p.label)}</b><span>${fmtMin(p.min)}</span></div>
             ${list((g.flow || {})[p.key], 'gd-do')}
           </div>`).join('')}
       </div>
+      <p class="gd-tip">설명이 일찍 끝나면 다음 구간 상자를 눌러요. 타이머가 그 구간 처음부터 흘러요.</p>
       <div class="gd-grid">
         ${g.good?.length || g.bad?.length ? `<section>
           ${g.good?.length ? `<h4>👍 좋은 예</h4>${list(g.good, 'gd-good')}` : ''}
@@ -1462,6 +1463,17 @@ document.addEventListener('click', async e => {
     case 'guide': return openGuide(Math.max(1, S.stage?.step ?? 1));
     case 'guide-go': return openGuide(+el.dataset.step);
     case 'guide-close': $('#guideOverlay').hidden = true; return;
+    case 'phase-jump': {
+      // 구간 상자를 누르면 그 구간 처음부터 타이머를 다시 흘린다 (설명이 일찍 끝났을 때 다음 구간으로 넘기기)
+      // 남은 시간 = 그 구간부터 끝까지의 시간. 앞에서 아낀 시간은 단계 전체에서 줄어든다
+      if (!S.admin) return;
+      const step = +el.dataset.step, k = +el.dataset.k;
+      const list = phasesOf(AGENDA[step]);
+      const rest = list.slice(k).reduce((s, p) => s + p.min, 0) * 60000;
+      if (S.stage?.step !== step) return toast('이 단계를 먼저 시작해 주세요');
+      if (S.stage.pausedLeft != null) return save(store.set('stage', { step, pausedLeft: rest }));
+      return save(store.set('stage', { step, endsAt: now() + rest }));
+    }
     case 'stage-prev': return startStep(Math.max(0, (S.stage?.step ?? 1) - 1));
     case 'stage-next': return startStep(Math.min(AGENDA.length - 1, (S.stage?.step ?? -1) + 1));
     case 'stage-plus': {

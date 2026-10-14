@@ -323,6 +323,11 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .gd-phases { display: flex; gap: 10px; margin-bottom: 20px; }
 .gd-phase { flex: 1 1 0; min-width: 0; border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; transition: border-color .2s, background .2s; }
 .gd-phase.intro { flex-grow: .8; }
+.gd-phase { cursor: pointer; }
+.gd-phases { margin-bottom: 6px; }
+.gd-tip { font-size: 13px; color: var(--ink-3); margin: 0 0 18px; }
+.gd-phase:hover { border-color: var(--ink-3); }
+.gd-phase.now:hover { border-color: var(--accent); }
 .gd-phase.now { border-color: var(--accent); background: #fff8f0; }
 .gd-phase.done { opacity: .45; }
 .gd-ph-head { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; margin-bottom: 6px; }
