@@ -97,7 +97,7 @@ export const AGENDA = [
 // 4) 질문 세 개 (포스트잇 칸). poster = A1 전지 제목, pinMax = 📌로 전지에 붙일 수 있는 장수(0이면 📌 없음)
 //    q2(팀 전략)는 📌 대신 '핵심 과제로' 올려 아래 '12월까지 팀 핵심 과제'로 확정한다
 export const QUESTIONS = [
-  { id: 'q1', short: '원인', poster: '확정한 원인', pinMax: 4,
+  { id: 'q1', short: '원인', poster: '원인', pinMax: 4,
     text: '목표 매출과 차이가 생긴 가장 큰 원인은 무엇일까?' },
   { id: 'q2', short: '팀 전략', poster: '팀 전략·계획 아이디어', pinMax: 0,
     text: '12월 말 필사즉생 목표를 이루려면 팀은 무엇을 해야 할까?' },

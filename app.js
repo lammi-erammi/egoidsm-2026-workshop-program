@@ -576,7 +576,8 @@ function mustWinOf(teamId) {
 }
 function mustWinLine(teamId, cls = '') {
   const v = mustWinOf(teamId);
-  return `<div class="must-win ${cls}">🔥 12월 말 필사즉생 목표 <b>${v ? `월 ${fmtEok(v)}` : '정하는 중'}</b></div>`;
+  // 전지(아웃라인 PDF)에는 이모지 글꼴이 없어서 🔥는 화면에서만
+  return `<div class="must-win ${cls}">${cls ? '' : '🔥 '}12월 말 필사즉생 목표 <b>${v ? `월 ${fmtEok(v)}` : '정하는 중'}</b></div>`;
 }
 // 2번 칸(팀 전략): 필사즉생 목표와 지금까지 월 평균의 차이
 function mustWinGapHtml(teamId, cls = '') {
@@ -1045,6 +1046,11 @@ function posterHtml(teamId) {
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
           ${questHtml(tq, 'p-quest', '2026 팀 퀘스트')}
+          ${(() => {
+            // 원인 분석용 월 평균은 포스트잇 칸 대신 팀 퀘스트 아래에 한 줄로 (포스트잇 칸 높이를 맞추려고)
+            const mo = monthlyOf(teamId);
+            return mo ? `<div class="p-avg"><span>지금까지 월 평균 <b class="${mo.avg < mo.need ? 'bad' : 'good'}">${fmtEok(mo.avg)}</b></span><span>달성하려면 필요했던 월 평균 <b>${fmtEok(mo.need)}</b></span></div>` : '';
+          })()}
           ${mustWinLine(teamId, 'p-must')}
         </div>
       </div>
@@ -1061,10 +1067,9 @@ function posterHtml(teamId) {
       </div>
       ${S.posterNotes ? `
       <div class="p-notes">
-        ${QUESTIONS.filter(q => pinMaxOf(q.id)).map(q => `
+        ${QUESTIONS.filter(q => pinMaxOf(q.id)).map((q, n) => `
           <div class="p-col ${q.id}">
-            <div class="p-q"><span>${QUESTIONS.indexOf(q) + 1}</span>${esc(q.poster || q.short)}</div>
-            <div class="p-gapslot">${q.id === 'q1' ? monthlyHtml(teamId, 'p-gap') : ''}</div>
+            <div class="p-q"><span>${n + 1}</span>${esc(q.poster || q.short)}</div>
             <div class="p-stickies">${(() => {
               // 질문마다 pinMax 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
               const pins = pinsOf(teamId, q.id);
