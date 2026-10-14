@@ -160,6 +160,7 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 .stage-ask .mode:empty { display: none; }
 .stage-ask .mode.solo { background: #eef3fd; color: #1d4ed8; }
 .stage-ask .mode.talk { background: #e6f6ef; color: #0f6b50; }
+.stage-ask .mode.intro { background: #fff4d6; color: #92400e; }
 
 /* 팀퀘스트 목표 */
 .quest { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
@@ -310,6 +311,24 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .gd-good li::marker { color: var(--ok); }
 .gd-bad { color: var(--ink-2); }
 .gd-bad li::marker { color: var(--bad); }
+/* 단계 안내: 제목 옆 큰 타이머 + 구간(진행자 설명 → 혼자 쓰기 → 나머지) */
+.gd-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.gd-head > div:first-child { min-width: 0; }
+.gd-timer { flex: none; text-align: right; margin-right: 44px; }
+.gd-clock { font-size: clamp(44px, 6vw, 72px); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+.gd-clock.soon { color: var(--accent); }
+.gd-clock.over { color: var(--bad); }
+.gd-clock.paused { opacity: .5; }
+.gd-now-label { font-size: 14px; font-weight: 700; color: var(--ink-2); margin-top: 6px; max-width: 280px; }
+.gd-phases { display: flex; gap: 10px; margin-bottom: 20px; }
+.gd-phase { flex: 1 1 0; min-width: 0; border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; transition: border-color .2s, background .2s; }
+.gd-phase.intro { flex-grow: .8; }
+.gd-phase.now { border-color: var(--accent); background: #fff8f0; }
+.gd-phase.done { opacity: .45; }
+.gd-ph-head { display: flex; justify-content: space-between; gap: 8px; font-size: 16px; margin-bottom: 6px; }
+.gd-ph-head span { color: var(--ink-3); font-weight: 700; white-space: nowrap; }
+.gd-phase ul { margin: 0; padding-left: 20px; font-size: 16px; line-height: 1.6; word-break: keep-all; }
+@media (max-width: 720px) { .gd-head { flex-direction: column; } .gd-timer { text-align: left; margin-right: 0; } .gd-phases { flex-direction: column; } }
 .gd-say { margin-top: 8px; font-size: 22px; font-weight: 700; color: var(--accent); word-break: keep-all; }
 .gd-nav { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .gd-now { font-weight: 900; color: var(--accent); }

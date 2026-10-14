@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN } from './config.js';
+import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN, INTRO_MIN } from './config.js';
 
 // ── 기본 도구 ───────────────────────────────────────────────
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -211,7 +211,7 @@ function renderHeader() {
         <div id="timer" class="timer">--:--</div>
       </div>
     </div>
-    ${step != null && (AGENDA[step]?.ask || AGENDA[step]?.silent) ? `
+    ${step != null && AGENDA[step] ? `
     <div class="stage-ask">
       <span class="mode" id="stageMode"></span>
       ${AGENDA[step].ask ? `<span class="ask">💬 ${esc(AGENDA[step].ask)}</span>` : ''}
@@ -241,25 +241,66 @@ function tick() {
   let left = null;
   if (st?.endsAt) left = st.endsAt - now();
   else if (st?.pausedLeft != null) left = st.pausedLeft;
-  if (left == null) { el.textContent = '--:--'; el.className = 'timer'; return; }
-  // 단계 시작 뒤 처음 몇 분은 '혼자 쓰기', 그다음은 '함께 이야기'
+  if (left == null) { el.textContent = '--:--'; el.className = 'timer'; renderGuideTimer(st, null); return; }
+  // 단계 안의 구간(진행자 설명 → 혼자 쓰기 → 나머지)과 그 구간의 남은 시간. 구간이 끝나면 다음 구간으로 저절로 넘어간다
   const mode = $('#stageMode'), a = AGENDA[st.step];
-  if (mode && a?.silent) {
-    const soloLeft = left - (a.minutes - a.silent) * 60000;
-    if (soloLeft > 0) {
-      const s = Math.ceil(soloLeft / 1000);
-      mode.textContent = `🤫 혼자 쓰는 시간 ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-      mode.className = 'mode solo';
-    } else {
-      mode.textContent = '🗣 함께 이야기하기';
-      mode.className = 'mode talk';
-    }
+  const ph = a ? phaseNow(a, left) : null;
+  if (mode && ph) {
+    mode.textContent = `${ph.phase.label} ${fmtClock(ph.left)}`;
+    mode.className = 'mode ' + ph.phase.key;
   }
+  renderGuideTimer(st, left);
   const over = left < 0;
   const sec = Math.floor(Math.abs(left) / 1000);
   const t = `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
   el.textContent = over ? `+${t} 초과` : t;
   el.className = 'timer' + (over ? ' over' : left < 60000 ? ' soon' : '') + (st.pausedLeft != null ? ' paused' : '');
+}
+
+// ── 단계 안의 구간 ──
+// 모든 단계는 진행자 설명(INTRO_MIN분)으로 시작하고, 혼자 쓰는 시간(silent)이 있으면 그다음, 남은 시간은 talk 구간
+function phasesOf(a) {
+  const intro = a.intro ?? INTRO_MIN, solo = a.silent || 0;
+  return [
+    { key: 'intro', label: '📣 진행자 설명', min: intro },
+    { key: 'solo', label: '🤫 혼자 쓰기', min: solo },
+    { key: 'talk', label: a.talk || '🗣 함께 이야기', min: Math.max(0, a.minutes - intro - solo) }
+  ].filter(p => p.min > 0);
+}
+// left = 단계 전체 남은 시간(ms) → 지금 구간과 그 구간의 남은 시간. 시간이 넘치면 마지막 구간에서 음수
+function phaseNow(a, left) {
+  const list = phasesOf(a);
+  let t = a.minutes * 60000 - left;
+  for (let k = 0; k < list.length; k++) {
+    const len = list[k].min * 60000;
+    if (t < len || k === list.length - 1) return { phase: list[k], index: k, left: len - t, list };
+    t -= len;
+  }
+}
+const fmtClock = ms => {
+  const s = Math.ceil(Math.abs(ms) / 1000);
+  return `${ms < 0 ? '+' : ''}${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+const fmtMin = m => (m >= 1 ? `${Math.floor(m)}분` : '') + (m % 1 ? `${Math.round(m % 1 * 60)}초` : '');
+
+// 단계 안내 화면의 타이머: 지금 진행 중인 단계를 보고 있을 때만 움직인다
+function renderGuideTimer(st, left) {
+  const box = $('#gdTimer');
+  if (!box) return;
+  const i = +box.dataset.step, a = AGENDA[i];
+  const live = st && st.step === i && left != null;
+  const ph = live ? phaseNow(a, left) : null;
+  box.querySelectorAll('[data-phase]').forEach((el, k) => {
+    el.classList.toggle('now', !!ph && k === ph.index);
+    el.classList.toggle('done', !!ph && k < ph.index);
+  });
+  const big = $('#gdClock');
+  if (big) {
+    big.textContent = ph ? fmtClock(ph.left) : '--:--';
+    big.className = 'gd-clock' + (ph && ph.left < 0 ? ' over' : ph && ph.left < 15000 ? ' soon' : '') + (st?.pausedLeft != null ? ' paused' : '');
+  }
+  const now = $('#gdNowLabel');
+  if (now) now.textContent = ph ? `${ph.phase.label}${ph.index < ph.list.length - 1 ? ` → 다음: ${ph.list[ph.index + 1].label}` : ''}` : '아직 시작 전이에요 · 아래 \'이 단계 시작\'을 누르면 타이머가 흘러요';
 }
 
 // 지금 단계의 칸을 강조하고, 나머지 칸은 살짝 흐리게 한다
@@ -362,18 +403,29 @@ function openGuide(i) {
   ov.innerHTML = `
     <div class="gd-card">
       <button class="jo-close" data-act="guide-close" title="닫기 (Esc)">✕</button>
-      <p class="eyebrow">진행 순서 ${i + 1} / ${AGENDA.length} · ${a.minutes}분${a.silent ? ` (처음 ${a.silent}분은 혼자 쓰기)` : ''}</p>
-      <h1>${esc(a.title)}</h1>
-      ${qs.length ? `<p class="gd-q">${qs.map(q => `${esc(q.short)} 칸: ${esc(q.text)}`).join('<br>')}</p>` : ''}
+      <div class="gd-head">
+        <div>
+          <p class="eyebrow">진행 순서 ${i + 1} / ${AGENDA.length} · 모두 ${a.minutes}분</p>
+          <h1>${esc(a.title)}</h1>
+          ${qs.length ? `<p class="gd-q">${qs.map(q => `${esc(q.short)} 칸: ${esc(q.text)}`).join('<br>')}</p>` : ''}
+        </div>
+        <div class="gd-timer"><div id="gdClock" class="gd-clock">--:--</div><div id="gdNowLabel" class="gd-now-label"></div></div>
+      </div>
       <p class="gd-goal">🎯 ${esc(g.goal)}</p>
+      <div class="gd-phases" id="gdTimer" data-step="${i}">
+        ${phasesOf(a).map(p => `
+          <div class="gd-phase ${p.key}" data-phase="${p.key}">
+            <div class="gd-ph-head"><b>${esc(p.label)}</b><span>${fmtMin(p.min)}</span></div>
+            ${list((g.flow || {})[p.key], 'gd-do')}
+          </div>`).join('')}
+      </div>
       <div class="gd-grid">
-        <section><h4>이렇게 진행해요</h4>${list(g.do, 'gd-do')}</section>
         ${g.good?.length || g.bad?.length ? `<section>
           ${g.good?.length ? `<h4>👍 좋은 예</h4>${list(g.good, 'gd-good')}` : ''}
           ${g.bad?.length ? `<h4>👎 피해야 할 예</h4>${list(g.bad, 'gd-bad')}` : ''}
         </section>` : ''}
+        ${g.say ? `<section><h4>💬 진행자 질문</h4><p class="gd-say">“${esc(g.say)}”</p></section>` : ''}
       </div>
-      ${g.say ? `<p class="gd-say">💬 “${esc(g.say)}”</p>` : ''}
       <div class="gd-nav">
         <button class="btn sm" data-act="guide-go" data-step="${i - 1}" ${i <= 0 ? 'disabled' : ''}>◀ 이전 단계 안내</button>
         ${S.stage?.step === i ? '<span class="gd-now">▶ 지금 진행 중</span>' : `<button class="btn sm primary" data-act="stage" data-step="${i}">이 단계 시작 (${a.minutes}분 타이머)</button>`}
@@ -381,6 +433,7 @@ function openGuide(i) {
       </div>
     </div>`;
   ov.hidden = false;
+  tick();
 }
 
 // 마무리 화면: 마지막 단계 안내에서 '마무리'를 누르면 오늘 만든 것을 숫자로 보여 주고 인사한다
