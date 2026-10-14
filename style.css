@@ -296,7 +296,9 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .jo-bar { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; margin-top: 12px; }
 .jo-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .4s; }
 /* 단계 안내 화면 (진행자) */
-.guide-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(246, 243, 238, .97); display: grid; place-items: center; padding: 24px; overflow-y: auto; }
+.guide-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(246, 243, 238, .97); display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: center; padding: 24px; overflow-y: auto; overflow-x: hidden; }
+.gd-card, .gd-grid > section { min-width: 0; }
+.gd-card { overflow-wrap: anywhere; }
 .guide-overlay[hidden] { display: none; }
 .gd-card { position: relative; width: min(1100px, 100%); background: var(--paper); border-radius: 24px; padding: 36px 48px; box-shadow: 0 20px 60px rgba(0,0,0,.12); }
 .gd-card h1 { font-size: clamp(28px, 4vw, 44px); font-weight: 900; letter-spacing: -1px; margin: 4px 0 12px; }
@@ -311,6 +313,14 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .gd-say { margin-top: 8px; font-size: 22px; font-weight: 700; color: var(--accent); word-break: keep-all; }
 .gd-nav { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .gd-now { font-weight: 900; color: var(--accent); }
+.gd-finish { text-align: center; }
+.gd-finish h1 { font-size: clamp(36px, 6vw, 64px); }
+.gd-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 8px 0 20px; }
+.gd-stats div { background: var(--bg); border-radius: 16px; padding: 18px 8px; }
+.gd-stats b { white-space: nowrap; font-size: clamp(32px, 5vw, 56px); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+.gd-stats span { font-size: 18px; font-weight: 700; margin-left: 2px; }
+.gd-stats small { display: block; font-size: 15px; color: var(--ink-2); margin-top: 4px; }
+@media (max-width: 720px) { .gd-stats { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 720px) { .gd-card { padding: 28px 20px; } .gd-goal, .gd-say { font-size: 18px; } .gd-grid ul { font-size: 16px; } }
 .tExp { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
 .tExp input { width: 64px; }

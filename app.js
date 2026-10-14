@@ -344,6 +344,7 @@ function renderJoinOverlay() {
 
 // ── 단계 안내 화면 (진행자): 단계를 누르면 그 단계에서 할 일·예시·진행 멘트를 크게 보여 준다 ──
 function openGuide(i) {
+  if (i === AGENDA.length) return openFinish();
   const a = AGENDA[i];
   if (!a) return;
   if (!a.guide) { if (i === 0) openJoinOverlay(); return; }
@@ -376,7 +377,36 @@ function openGuide(i) {
       <div class="gd-nav">
         <button class="btn sm" data-act="guide-go" data-step="${i - 1}" ${i <= 0 ? 'disabled' : ''}>◀ 이전 단계 안내</button>
         ${S.stage?.step === i ? '<span class="gd-now">▶ 지금 진행 중</span>' : `<button class="btn sm primary" data-act="stage" data-step="${i}">이 단계 시작 (${a.minutes}분 타이머)</button>`}
-        <button class="btn sm" data-act="guide-go" data-step="${i + 1}" ${i >= AGENDA.length - 1 ? 'disabled' : ''}>다음 단계 안내 ▶</button>
+        <button class="btn sm" data-act="guide-go" data-step="${i + 1}">${i === AGENDA.length - 1 ? '마무리 ▶' : '다음 단계 안내 ▶'}</button>
+      </div>
+    </div>`;
+  ov.hidden = false;
+}
+
+// 마무리 화면: 마지막 단계 안내에서 '마무리'를 누르면 오늘 만든 것을 숫자로 보여 주고 인사한다
+function openFinish() {
+  const ov = $('#guideOverlay');
+  if (!ov) return;
+  const teams = teamList();
+  const sum = f => teams.reduce((n, t) => n + f(t.id), 0);
+  const stats = [
+    ['참여한 팀', teams.filter(t => notesOf(t.id).length).length, '개'],
+    ['붙인 포스트잇', sum(id => notesOf(id).length), '장'],
+    ['팀 핵심 과제', sum(id => plansOf(id).length), '개'],
+    ['내가 할 실행안', sum(id => pinsOf(id, 'q3').length), '개']
+  ];
+  ov.dataset.step = AGENDA.length;
+  ov.innerHTML = `
+    <div class="gd-card gd-finish">
+      <button class="jo-close" data-act="guide-close" title="닫기 (Esc)">✕</button>
+      <p class="eyebrow">${esc(EVENT.title)} · ${esc(EVENT.program)}</p>
+      <h1>🎉 수고하셨습니다!</h1>
+      <p class="gd-goal">12월 말 필사즉생 목표를 위해 팀이 할 일과 내가 할 일을 정했어요.<br>오늘 정한 실행안은 내일부터 바로 시작해요.</p>
+      <div class="gd-stats">${stats.map(([k, v, u]) => `<div><b>${v}</b><span>${u}</span><small>${k}</small></div>`).join('')}</div>
+      <p class="gd-say">💬 “각 팀 전지는 A1으로 출력해 팀 자리에 붙여 둘게요. 12월 31일에 이 숫자로 다시 만나요!”</p>
+      <div class="gd-nav">
+        <button class="btn sm" data-act="guide-go" data-step="${AGENDA.length - 1}">◀ 실행안 확정 안내</button>
+        <button class="btn sm primary" data-act="guide-close">닫기</button>
       </div>
     </div>`;
   ov.hidden = false;
@@ -503,7 +533,10 @@ const sortNotes = arr => arr.sort((a, b) => Object.keys(b.likes || {}).length - 
 
 // ── 목표 = 2026 팀퀘스트 (미션 편집에서 숫자를 고친다) ──
 // meta.quests.company = 회사 목표(운영부서·그로스·CEO실도 같은 목표), meta.quests[팀 id] = 브랜드처럼 따로 목표가 있는 팀
-const fmtEok = v => `${(Math.round(v * 10) / 10).toLocaleString('ko-KR')}억`;
+// 1억 아래는 만 원 단위로 (예: 0.6 → 6,000만)
+const fmtEok = v => Math.abs(v) < 1 && v !== 0
+  ? `${(Math.round(v * 1000) * 10).toLocaleString('ko-KR')}만`
+  : `${(Math.round(v * 10) / 10).toLocaleString('ko-KR')}억`;
 function questOf(teamId) {
   const qs = S.meta?.quests || {};
   const own = teamId && qs[teamId];
@@ -589,7 +622,7 @@ function teamCard(t) {
       ${t.deptMission ? `<h4>${esc(t.dept || '부서')} 미션</h4><p class="big">${br(t.deptMission)}</p>` : ''}
       ${t.mission ? `<h4>${t.deptMission ? '팀 미션' : '미션'}</h4><p class="${t.deptMission ? 'mid' : 'big'}">${br(t.mission)}</p>` : ''}
       ${!any ? '<p class="empty">미션이 아직 없어요</p>' : ''}
-      ${questHtml(q, '', q?.shared ? '2026 전사 퀘스트' : '2026 팀 퀘스트')}
+      ${questHtml(q, '', '2026 팀 퀘스트')}
       ${mustWinLine(t.id)}
     </div>`;
 }
@@ -1011,7 +1044,7 @@ function posterHtml(teamId) {
           ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
-          ${questHtml(tq, 'p-quest', tq?.shared ? '2026 전사 퀘스트' : '2026 팀 퀘스트')}
+          ${questHtml(tq, 'p-quest', '2026 팀 퀘스트')}
           ${mustWinLine(teamId, 'p-must')}
         </div>
       </div>
