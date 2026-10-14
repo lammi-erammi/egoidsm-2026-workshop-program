@@ -226,6 +226,7 @@ function renderHeader() {
       <button class="btn sm" data-act="stage-pause">${S.stage?.pausedLeft != null ? '다시 시작' : '멈춤'}</button>
       <button class="btn sm ghost" data-act="stage-reset">타이머 끄기</button>
       <span class="sep"></span>
+      <button class="btn sm primary" data-act="guide">📋 단계 안내</button>
       <button class="btn sm" data-act="join-qr">접속 QR 띄우기</button>
       <button class="btn sm" data-act="copy-link">참가자 링크 복사</button>
       <button class="btn sm" data-act="backup">백업 받기</button>
@@ -250,7 +251,7 @@ function tick() {
       mode.textContent = `🤫 혼자 쓰는 시간 ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
       mode.className = 'mode solo';
     } else {
-      mode.textContent = '🗣 함께 이야기하고 📌 고르기';
+      mode.textContent = '🗣 함께 이야기하기';
       mode.className = 'mode talk';
     }
   }
@@ -263,10 +264,11 @@ function tick() {
 
 // 지금 단계의 칸을 강조하고, 나머지 칸은 살짝 흐리게 한다
 function markFocus() {
-  const focus = AGENDA[S.stage?.step]?.focus;
+  const f = AGENDA[S.stage?.step]?.focus;
+  const focus = new Set([].concat(f || []).filter(Boolean));
   let any = false;
   document.querySelectorAll('[data-focus]').forEach(el => {
-    const on = !!focus && el.dataset.focus === focus;
+    const on = focus.has(el.dataset.focus);
     el.classList.toggle('focus', on);
     any ||= on;
   });
@@ -340,8 +342,50 @@ function renderJoinOverlay() {
   }).join('');
 }
 
+// ── 단계 안내 화면 (진행자): 단계를 누르면 그 단계에서 할 일·예시·진행 멘트를 크게 보여 준다 ──
+function openGuide(i) {
+  const a = AGENDA[i];
+  if (!a) return;
+  if (!a.guide) { if (i === 0) openJoinOverlay(); return; }
+  let ov = $('#guideOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'guideOverlay';
+    ov.className = 'guide-overlay';
+    document.body.appendChild(ov);
+  }
+  const g = a.guide;
+  const qs = [].concat(a.focus || []).map(f => QUESTIONS.find(q => q.id === f)).filter(Boolean);
+  const list = (arr, cls) => arr?.length ? `<ul class="${cls}">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  ov.dataset.step = i;
+  ov.innerHTML = `
+    <div class="gd-card">
+      <button class="jo-close" data-act="guide-close" title="닫기 (Esc)">✕</button>
+      <p class="eyebrow">진행 순서 ${i + 1} / ${AGENDA.length} · ${a.minutes}분${a.silent ? ` (처음 ${a.silent}분은 혼자 쓰기)` : ''}</p>
+      <h1>${esc(a.title)}</h1>
+      ${qs.length ? `<p class="gd-q">${qs.map(q => `${esc(q.short)} 칸: ${esc(q.text)}`).join('<br>')}</p>` : ''}
+      <p class="gd-goal">🎯 ${esc(g.goal)}</p>
+      <div class="gd-grid">
+        <section><h4>이렇게 진행해요</h4>${list(g.do, 'gd-do')}</section>
+        ${g.good?.length || g.bad?.length ? `<section>
+          ${g.good?.length ? `<h4>👍 좋은 예</h4>${list(g.good, 'gd-good')}` : ''}
+          ${g.bad?.length ? `<h4>👎 피해야 할 예</h4>${list(g.bad, 'gd-bad')}` : ''}
+        </section>` : ''}
+      </div>
+      ${g.say ? `<p class="gd-say">💬 “${esc(g.say)}”</p>` : ''}
+      <div class="gd-nav">
+        <button class="btn sm" data-act="guide-go" data-step="${i - 1}" ${i <= 0 ? 'disabled' : ''}>◀ 이전 단계 안내</button>
+        ${S.stage?.step === i ? '<span class="gd-now">▶ 지금 진행 중</span>' : `<button class="btn sm primary" data-act="stage" data-step="${i}">이 단계 시작 (${a.minutes}분 타이머)</button>`}
+        <button class="btn sm" data-act="guide-go" data-step="${i + 1}" ${i >= AGENDA.length - 1 ? 'disabled' : ''}>다음 단계 안내 ▶</button>
+      </div>
+    </div>`;
+  ov.hidden = false;
+}
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $('#joinOverlay') && !$('#joinOverlay').hidden) $('#joinOverlay').hidden = true;
+  if (e.key !== 'Escape') return;
+  if ($('#joinOverlay') && !$('#joinOverlay').hidden) $('#joinOverlay').hidden = true;
+  if ($('#guideOverlay') && !$('#guideOverlay').hidden) $('#guideOverlay').hidden = true;
 });
 
 const uncountedNames = () => new Set((S.meta?.uncounted || []).map(n => String(n).trim()).filter(Boolean));
@@ -408,7 +452,7 @@ function buildBoard() {
             ${i < 2 ? `<div id="gapBox-${q.id}"></div>` : ''}
             <div class="pin-count" id="pins-${q.id}"></div>
             <form class="composer" data-q="${q.id}">
-              <textarea rows="2" maxlength="500" placeholder="${esc(q.hint || '생각을 적고 Enter')} — Enter로 붙이기"></textarea>
+              <textarea rows="2" maxlength="500" placeholder="생각을 적고 Enter로 붙이기"></textarea>
               <button class="btn primary">붙이기</button>
             </form>
             <div class="notes" id="notes-${q.id}"></div>
@@ -417,7 +461,7 @@ function buildBoard() {
       <div class="paper" data-focus="plan">
         <div class="paper-head">
           <h2>${esc(PLAN.title)}</h2>
-          <p>실행안 포스트잇의 <b>‘계획으로’</b>를 누르거나 아래에 직접 적어요. ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
+          <p>2번 칸(팀 전략) 포스트잇의 <b>‘⭐ 핵심 과제로’</b>를 누르거나 아래에 직접 적어요. ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
         </div>
         <div class="pin-count" id="planCount"></div>
         <ol class="plan" id="plan"></ol>
@@ -426,7 +470,7 @@ function buildBoard() {
             <label class="pf pf-${f.key}"><span>${esc(f.label)}</span>
               <input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}" required>
             </label>`).join('')}
-          <button class="btn primary">계획에 넣기</button>
+          <button class="btn primary">과제에 넣기</button>
         </form>
         <div class="signers" id="signers"></div>
       </div>
@@ -474,18 +518,12 @@ function monthlyOf(teamId) {
   const q = questOf(teamId);
   const m = parseInt(String(S.meta?.questAsOf || '').match(/\d+/)?.[0], 10);
   if (!q || !(m >= 1 && m <= 12)) return null;
-  return { months: m, avg: q.actual / m, need: q.target / 12, needLeft: m < 12 ? q.left / (12 - m) : null, rest: 12 - m };
+  return { months: m, avg: q.actual / m, need: q.target / 12 };
 }
-// part 'past' = 원인 분석(지금까지·필요했던 월 평균), 'left' = 12월까지 할 일(남은 기간 필요한 월 평균)
-function monthlyHtml(teamId, part, cls = '') {
+// 1번 칸(원인 분석): 지금까지 월 평균과 필요했던 월 평균
+function monthlyHtml(teamId, cls = '') {
   const mo = monthlyOf(teamId);
   if (!mo) return '';
-  if (part === 'left') {
-    return mo.needLeft == null ? '' : `
-      <div class="gap-box ${cls}">
-        <div><span>남은 ${mo.rest}개월 동안 필요한 월 평균</span><b class="bad">${fmtEok(mo.needLeft)}</b></div>
-      </div>`;
-  }
   const short = mo.avg < mo.need;
   return `
     <div class="gap-box ${cls}">
@@ -494,12 +532,39 @@ function monthlyHtml(teamId, part, cls = '') {
     </div>`;
 }
 
-function questHtml(q, cls = '') {
+// ── 12월 말 필사즉생 목표 (월 매출, 억) ──
+// meta.mustWin.company = 회사(운영부서·그로스·CEO실도 같은 목표), meta.mustWin[팀 id] = 브랜드처럼 따로 정한 팀
+// 자기 퀘스트가 따로 있는 팀(브랜드)은 회사 목표를 물려받지 않는다 → 값이 없으면 '정하는 중'
+function mustWinOf(teamId) {
+  const mw = S.meta?.mustWin || {};
+  const ownQuest = !!(teamId && S.meta?.quests?.[teamId]);
+  const v = teamId && mw[teamId] != null && mw[teamId] !== '' ? mw[teamId] : (ownQuest ? null : mw.company);
+  return +v > 0 ? +v : null;
+}
+function mustWinLine(teamId, cls = '') {
+  const v = mustWinOf(teamId);
+  return `<div class="must-win ${cls}">🔥 12월 말 필사즉생 목표 <b>${v ? `월 ${fmtEok(v)}` : '정하는 중'}</b></div>`;
+}
+// 2번 칸(팀 전략): 필사즉생 목표와 지금까지 월 평균의 차이
+function mustWinGapHtml(teamId, cls = '') {
+  const v = mustWinOf(teamId);
+  if (!v) return `<div class="gap-box ${cls}"><div><span>12월 말 필사즉생 목표</span><b>정하는 중</b></div></div>`;
+  const mo = monthlyOf(teamId);
+  const more = mo ? v - mo.avg : null;
+  return `
+    <div class="gap-box ${cls}">
+      <div><span>12월 말 필사즉생 목표</span><b class="bad">월 ${fmtEok(v)}</b></div>
+      ${mo ? `<div><span>지금까지 월 평균 (${mo.months}개월)</span><b>${fmtEok(mo.avg)}</b></div>
+      <div><span>목표까지</span><b class="${more > 0 ? 'bad' : 'good'}">${more > 0 ? `월 ${fmtEok(more)} 더` : '이미 넘었어요'}</b></div>` : ''}
+    </div>`;
+}
+
+function questHtml(q, cls = '', name = '2026 팀 퀘스트') {
   if (!q) return '';
   const asOf = S.meta?.questAsOf ? `${esc(S.meta.questAsOf)}까지` : '지금까지';
   return `
     <div class="quest ${cls}">
-      <div class="q-line"><b>${fmtEok(q.target)}</b><span>2026 팀퀘스트 매출 목표</span></div>
+      <div class="q-line"><b>${fmtEok(q.target)}</b><span>${name} 매출 목표</span></div>
       <div class="q-bar"><i style="width:${Math.min(100, q.rate).toFixed(1)}%"></i></div>
       <div class="q-now">${asOf} <b>${fmtEok(q.actual)}</b> · 달성률 <b>${q.rate.toFixed(1)}%</b> · 남은 <b>${fmtEok(q.left)}</b></div>
     </div>`;
@@ -510,11 +575,11 @@ function companyCard(c) {
     <div class="mcard company">
       <div class="label">회사 · ${esc(c.name || '에고이즘')}</div>
       ${c.mission ? `<h4>미션</h4><p class="big">${br(c.mission)}</p>` : '<p class="empty">미션이 아직 없어요</p>'}
-      ${questHtml(questOf(''))}
+      ${questHtml(questOf(''), '', '2026 전사 퀘스트')}
     </div>`;
 }
 
-// 팀 카드: 부서 미션(예: 운영부서) + 팀·브랜드 미션 + 팀퀘스트 목표
+// 팀 카드: 부서 미션(예: 운영부서) + 팀·브랜드 미션 + 퀘스트(자기 퀘스트가 없으면 전사 퀘스트) + 필사즉생 목표
 function teamCard(t) {
   const any = t.deptMission || t.mission;
   const q = questOf(t.id);
@@ -524,7 +589,8 @@ function teamCard(t) {
       ${t.deptMission ? `<h4>${esc(t.dept || '부서')} 미션</h4><p class="big">${br(t.deptMission)}</p>` : ''}
       ${t.mission ? `<h4>${t.deptMission ? '팀 미션' : '미션'}</h4><p class="${t.deptMission ? 'mid' : 'big'}">${br(t.mission)}</p>` : ''}
       ${!any ? '<p class="empty">미션이 아직 없어요</p>' : ''}
-      ${questHtml(q)}
+      ${questHtml(q, '', q?.shared ? '2026 전사 퀘스트' : '2026 팀 퀘스트')}
+      ${mustWinLine(t.id)}
     </div>`;
 }
 
@@ -540,19 +606,21 @@ function updateBoard() {
     online.map(p => `<span class="chip ${p.id === uid ? 'me' : ''}">${esc(p.name)}</span>`).join('');
 
   $('#missions').innerHTML = companyCard(c) + teamCard(team);
-  if ($('#gapBox-q1')) $('#gapBox-q1').innerHTML = monthlyHtml(S.team, 'past');
-  if ($('#gapBox-q2')) $('#gapBox-q2').innerHTML = monthlyHtml(S.team, 'left');
+  if ($('#gapBox-q1')) $('#gapBox-q1').innerHTML = monthlyHtml(S.team);
+  if ($('#gapBox-q2')) $('#gapBox-q2').innerHTML = mustWinGapHtml(S.team);
 
   const notes = notesOf(S.team);
   for (const q of QUESTIONS) {
     const pins = pinsOf(S.team, q.id);
-    const full = pins.length >= PIN_MAX;
-    // 전지에 붙인 포스트잇이 맨 위, 나머지는 공감 순
+    const max = pinMaxOf(q.id);
+    const full = pins.length >= max;
+    // 전지에 붙인(또는 핵심 과제로 올린) 포스트잇이 맨 위, 나머지는 공감 순
     const list = sortNotes(notes.filter(n => n.q === q.id))
       .map(n => ({ n, slot: pinSlotOf(S.team, q.id, n.id) }))
-      .sort((a, b) => (b.slot ? 1 : 0) - (a.slot ? 1 : 0));
-    $(`#pins-${q.id}`).innerHTML = `📌 전지에 붙인 포스트잇 <b>${pins.length}/${PIN_MAX}</b>` +
-      (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '');
+      .sort((a, b) => (b.slot || isPromoted(S.team, b.n.id) ? 1 : 0) - (a.slot || isPromoted(S.team, a.n.id) ? 1 : 0));
+    $(`#pins-${q.id}`).innerHTML = max
+      ? `📌 전지에 붙인 포스트잇 <b>${pins.length}/${max}</b>` + (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '')
+      : `⭐ 핵심 과제로 올린 아이디어 <b>${list.filter(x => isPromoted(S.team, x.n.id)).length}</b>개 <span class="lbl">— 포스트잇의 '핵심 과제로'를 눌러 아래 '${esc(PLAN.title)}'로 확정해요</span>`;
     $(`#notes-${q.id}`).innerHTML = list.length
       ? list.map(({ n, slot }) => noteHtml(n, slot, full)).join('')
       : '<p class="empty">아직 붙은 포스트잇이 없어요</p>';
@@ -561,7 +629,7 @@ function updateBoard() {
   const plans = plansOf(S.team);
   const onPoster = posterPlansOf(S.team);
   const posterFull = onPoster.length >= PLAN.posterMax;
-  $('#planCount').innerHTML = `계획 <b>${plans.length}/${PLAN.max}</b> · 🖼 전지에 넣은 계획 <b>${onPoster.length}/${PLAN.posterMax}</b>` +
+  $('#planCount').innerHTML = `핵심 과제 <b>${plans.length}/${PLAN.max}</b> · 🖼 전지에 넣은 과제 <b>${onPoster.length}/${PLAN.posterMax}</b>` +
     (posterFull ? ' <span class="lbl">— 바꾸려면 하나를 빼 주세요</span>' : '');
   $('#plan').innerHTML = plans.length
     ? plans.map((p, i) => {
@@ -585,13 +653,13 @@ function updateBoard() {
         </span>
       </li>`;
     }).join('')
-    : '<li class="empty">아직 실행 계획이 없어요</li>';
+    : '<li class="empty">아직 팀 핵심 과제가 없어요</li>';
 
   // 다 차면 입력 칸을 막는다
   const full = plans.length >= PLAN.max;
   $('#planComposer').classList.toggle('full', full);
   $('#planComposer').querySelectorAll('input, button').forEach(x => { x.disabled = full; });
-  $('#planComposer button').textContent = full ? `${PLAN.max}개가 다 찼어요` : '계획에 넣기';
+  $('#planComposer button').textContent = full ? `${PLAN.max}개가 다 찼어요` : '과제에 넣기';
 
   const members = membersOf(S.team);
   $('#signers').innerHTML = members.length
@@ -607,27 +675,31 @@ function noteHtml(n, pinSlot, pinsFull) {
   const liked = !!n.likes?.[uid];
   const mine = n.uid === uid || S.admin;
   const pinText = pinSlot ? S.teams[S.team]?.pins?.[n.q]?.[pinSlot]?.text : '';
+  const max = pinMaxOf(n.q);
+  const promoted = isPromoted(S.team, n.id);
   return `
-    <div class="note ${esc(n.q)} ${n.uid === uid ? 'mine' : ''} ${pinSlot ? 'pinned' : ''}" data-id="${esc(n.id)}">
-      ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : ''}
+    <div class="note ${esc(n.q)} ${n.uid === uid ? 'mine' : ''} ${pinSlot || promoted ? 'pinned' : ''}" data-id="${esc(n.id)}">
+      ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : promoted ? '<span class="pin-badge">⭐ 핵심 과제</span>' : ''}
       <div class="note-text">${br(n.text)}</div>
       ${pinSlot && pinText !== n.text ? `<div class="pin-text">전지에는: “${esc(pinText)}”</div>` : ''}
       <div class="note-foot">
         <span class="by">${esc(n.name)}</span>
         <button class="like ${liked ? 'on' : ''}" data-act="like" title="공감">♥ ${likes || ''}</button>
-        ${pinSlot
+        ${!max ? '' : pinSlot
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
-          : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 질문은 ${PIN_MAX}장이 다 찼어요"` : `title="A1 전지에 붙여요 (질문마다 ${PIN_MAX}장)"`}>📌 전지에 붙이기</button>`}
-        <button class="link" data-act="promote" title="이 내용을 '${esc(PLAN.title)}'으로 올려요 (담당·기한·숫자를 채워요)">${isPromoted(S.team, n.id) ? '계획에 있음' : '계획으로'}</button>
+          : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 칸은 ${max}장이 다 찼어요"` : `title="A1 전지에 붙여요 (이 칸은 ${max}장까지)"`}>📌 전지에 붙이기</button>`}
+        ${n.q === 'q2' ? `<button class="pin ${promoted ? 'on' : ''}" data-act="promote" title="이 아이디어를 '${esc(PLAN.title)}'로 올려요 (담당·기한·숫자를 채워요)">${promoted ? '⭐ 과제에 있음' : '⭐ 핵심 과제로'}</button>` : ''}
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
 }
 
-// ── 전지에 붙일 포스트잇: 질문마다 p1~p4 네 자리만 있다 (규칙에서도 같은 자리만 허용) ──
+// ── 전지에 붙일 포스트잇: 질문마다 정해진 장수(pinMax)만큼 p1~p8 자리가 있다 (규칙은 p1~p8 허용) ──
 // 자리에는 포스트잇 id와 전지에 들어갈 글(40자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
-const PIN_MAX = 4, PIN_LEN = 40;
-const PIN_SLOTS = ['p1', 'p2', 'p3', 'p4'];
+const PIN_LEN = 40;
+const PIN_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
+const pinMaxOf = q => QUESTIONS.find(x => x.id === q)?.pinMax || 0;
+const pinSlotsFor = q => PIN_SLOTS.slice(0, pinMaxOf(q));
 // 자리 하나하나를 '살아 있는 자리'와 '버려진 자리'로 나눈다.
 // 버려진 자리 = 원래 포스트잇이 지워졌거나, 같은 포스트잇이 두 자리에 붙은 경우의 뒤쪽 자리
 // 글과 질문이 있는 포스트잇만 (반쯤 지워진 찌꺼기는 보이지 않게)
@@ -638,12 +710,13 @@ function pinSlots(teamId, q) {
   const notes = S.teams[teamId]?.notes || {};
   const seen = new Set();
   const live = [], dead = [];
+  const allowed = new Set(pinSlotsFor(q)); // 이 질문에 없는 자리(예: 📌가 없어진 칸의 예전 자리)도 버려진 자리
   PIN_SLOTS
     .map(slot => ({ slot, ...(S.teams[teamId]?.pins?.[q]?.[slot] || {}) }))
     .filter(p => p.ts)
     .sort((a, b) => a.ts - b.ts)
     .forEach(p => {
-      if (p.text && isNote(notes[p.note]) && !seen.has(p.note)) { seen.add(p.note); live.push(p); }
+      if (allowed.has(p.slot) && p.text && isNote(notes[p.note]) && !seen.has(p.note)) { seen.add(p.note); live.push(p); }
       else dead.push(p);
     });
   return { live, dead };
@@ -664,7 +737,7 @@ function cleanupDeadPins(teamId) {
   }
 }
 
-// 포스트잇이 실행 계획으로 올라가 있는지는 계획 쪽을 보고 판단한다 (계획을 지우면 다시 올릴 수 있게)
+// 포스트잇이 핵심 과제로 올라가 있는지는 과제 쪽을 보고 판단한다 (과제를 지우면 다시 올릴 수 있게)
 const isPromoted = (teamId, noteId) => plansOf(teamId).some(p => p.from === noteId);
 
 // 같은 사람이 핸드폰·노트북 두 곳에서 들어와도 이름은 한 번만
@@ -688,8 +761,8 @@ async function pinNote(note, noteId) {
   // 버려진 자리는 먼저 비우고 쓴다
   for (const p of pinSlots(S.team, note.q).dead) await store.remove(`teams/${S.team}/pins/${note.q}/${p.slot}`).catch(() => {});
   const taken = new Set(pinsOf(S.team, note.q).map(p => p.slot));
-  const slot = PIN_SLOTS.find(k => !taken.has(k));
-  if (!slot) return toast(`이 질문은 전지에 ${PIN_MAX}장까지 붙일 수 있어요. 하나를 떼고 붙여 주세요`);
+  const slot = pinSlotsFor(note.q).find(k => !taken.has(k));
+  if (!slot) return toast(`이 칸은 전지에 ${pinMaxOf(note.q)}장까지 붙일 수 있어요. 하나를 떼고 붙여 주세요`);
   try {
     await store.set(`teams/${S.team}/pins/${note.q}/${slot}`, { note: noteId, text, ts: now(), by: uid });
   } catch {
@@ -734,7 +807,7 @@ async function addPlan(values, from) {
   if (!isPlan(values)) { toast(`${PLAN.fields.map(f => f.label).join('·')} 네 칸을 모두 채워 주세요`); return false; }
   const used = S.teams[S.team]?.plan || {};
   const slot = PLAN_SLOTS.find(k => !used[k]);
-  if (!slot) { toast(`실행 계획은 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
+  if (!slot) { toast(`핵심 과제는 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
   const ts = now();
   // 전지 자리가 남아 있으면 처음부터 전지에 넣어 둔다 (나중에 🖼로 빼거나 바꿀 수 있다)
   const onPoster = posterPlansOf(S.team).length < PLAN.posterMax;
@@ -781,8 +854,8 @@ function updateAll() {
       <article class="tcard ${t.id === me.team ? 'mine' : ''}">
         <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}${+t.expected ? ' / ' + t.expected : ''}명</span></header>
         <div class="counts">${QUESTIONS.map((q, i) => `<span class="cnt ${q.id}" title="${esc(q.text)}">${i + 1}. ${notes.filter(n => n.q === q.id).length}장</span>`).join('')}</div>
-        <div class="lbl">실행 계획 ${all.length}개 · 전지에 ${plans.length}개</div>
-        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">전지에 넣은 실행 계획 없음</li>'}</ol>
+        <div class="lbl">핵심 과제 ${all.length}개 · 전지에 ${plans.length}개</div>
+        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">전지에 넣은 핵심 과제 없음</li>'}</ol>
         <button class="btn sm" data-act="open-team" data-team="${esc(t.id)}">전지 보기</button>
       </article>`;
   }).join('');
@@ -798,7 +871,7 @@ function buildPoster() {
         <label><input type="checkbox" id="pNotes" ${S.posterNotes ? 'checked' : ''}> 포스트잇 넣기</label>
         <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
         <button class="btn" id="pPrint">인쇄 창으로 보기</button>
-        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 포스트잇은 팀이 📌로 고른 것(질문마다 ${PIN_MAX}장까지)만 들어가요.</p>
+        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 포스트잇은 팀이 📌로 고른 것(${QUESTIONS.filter(q => q.pinMax).map(q => `${esc(q.poster)} ${q.pinMax}장`).join(', ')}까지)만 들어가요. 팀 전략 아이디어는 핵심 과제로 정리돼 전지에는 따로 넣지 않아요.</p>
       </div>
       <div class="poster-frame" id="pFrame"><div class="poster-scale" id="pScale"></div></div>
     </section>`);
@@ -932,13 +1005,14 @@ function posterHtml(teamId) {
       <div class="p-missions">
         <div class="p-m">
           <b>${esc(c.name || '에고이즘')}의 미션</b><p>${br(c.mission)}</p>
-          ${questHtml(cq, 'p-quest')}
+          ${questHtml(cq, 'p-quest', '2026 전사 퀘스트')}
         </div>
         <div class="p-m">
           ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
           ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
-          ${questHtml(tq, 'p-quest')}
+          ${questHtml(tq, 'p-quest', tq?.shared ? '2026 전사 퀘스트' : '2026 팀 퀘스트')}
+          ${mustWinLine(teamId, 'p-must')}
         </div>
       </div>
       <div class="p-plan">
@@ -949,21 +1023,22 @@ function posterHtml(teamId) {
               <span class="p-n">${i + 1}</span>
               <div><div class="p-what">${esc(p.what)}</div>
               <div class="p-meta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
-            </li>`).join('') || '<li class="empty">🖼 전지에 넣을 실행 계획을 골라 주세요</li>'}
+            </li>`).join('') || '<li class="empty">🖼 전지에 넣을 핵심 과제를 골라 주세요</li>'}
         </ol>
       </div>
       ${S.posterNotes ? `
       <div class="p-notes">
-        ${QUESTIONS.map((q, i) => `
-          <div class="p-col">
-            <div class="p-q"><span>${i + 1}</span>${esc(q.poster || q.short)}</div>
-            <div class="p-gapslot">${i === 0 ? monthlyHtml(teamId, 'past', 'p-gap') : i === 1 ? monthlyHtml(teamId, 'left', 'p-gap') : ''}</div>
+        ${QUESTIONS.filter(q => pinMaxOf(q.id)).map(q => `
+          <div class="p-col ${q.id}">
+            <div class="p-q"><span>${QUESTIONS.indexOf(q) + 1}</span>${esc(q.poster || q.short)}</div>
+            <div class="p-gapslot">${q.id === 'q1' ? monthlyHtml(teamId, 'p-gap') : ''}</div>
             <div class="p-stickies">${(() => {
-              // 질문마다 PIN_MAX 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
+              // 질문마다 pinMax 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
               const pins = pinsOf(teamId, q.id);
               if (!pins.length) return '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>';
-              return PIN_SLOTS.map((_, k) => pins[k]
-                ? `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span></div>`
+              const notes = S.teams[teamId]?.notes || {};
+              return pinSlotsFor(q.id).map((_, k) => pins[k]
+                ? `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span>${q.id === 'q3' && notes[pins[k].note]?.name ? `<em>${esc(notes[pins[k].note].name)}</em>` : ''}</div>`
                 : '<div class="p-slot"></div>').join('');
             })()}</div>
           </div>`).join('')}
@@ -986,9 +1061,10 @@ function buildMissionsEditor() {
         <label class="field">이름<input id="cName" value="${esc(c.name || '에고이즘')}"></label>
         <label class="field">미션<textarea id="cMission" rows="2">${esc(c.mission)}</textarea></label>
         <div class="quest-row">
-          <label class="field">2026 팀퀘스트 목표 (억)<input id="qcTarget" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.target ?? '')}"></label>
+          <label class="field">2026 전사 퀘스트 목표 (억)<input id="qcTarget" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.target ?? '')}"></label>
           <label class="field">달성 (억)<input id="qcActual" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.actual ?? '')}"></label>
           <label class="field">기준 (예: 9월)<input id="qAsOf" value="${esc(m.questAsOf || '')}" placeholder="9월"></label>
+          <label class="field">🔥 12월 말 필사즉생 월 매출 (억)<input id="mwCompany" type="number" step="0.1" min="0" value="${esc(m.mustWin?.company ?? '')}"></label>
         </div>
         <p class="sub">회사 목표는 운영부서·그로스·CEO실 팀에도 같이 쓰여요. 브랜드처럼 따로 목표가 있는 팀은 아래 팀 줄에 적어요. 매달 손익이 나오면 숫자만 고치고 저장하면 돼요.</p>
         <label class="field">워크샵 전체 참가 인원 (접속 현황 'n / 전체'에 쓰여요)<input id="cExpected" type="number" min="0" value="${esc(m.expected ?? '')}"></label>
@@ -1009,7 +1085,7 @@ function buildMissionsEditor() {
       ${S.meta ? `
       <div class="ed-block">
         <h3>샘플 데이터 <small>A1 전지가 어떻게 나오는지 미리 볼 때</small></h3>
-        <p class="sub">팀마다 포스트잇·실행 계획·이름(홍길동 등 가짜 이름)을 채워요. 샘플만 골라서 지울 수 있고, 사람들이 적은 내용은 그대로 남아요.</p>
+        <p class="sub">팀마다 포스트잇·핵심 과제·이름(홍길동 등 가짜 이름)을 채워요. 샘플만 골라서 지울 수 있고, 사람들이 적은 내용은 그대로 남아요.</p>
         <textarea id="sampleJson" rows="4" placeholder="sample.local.json 내용을 여기에 붙여 넣어요 (내 컴퓨터 미리보기에서는 비워 둬도 돼요)"></textarea>
         <div class="row-btns">
           <button class="btn" id="seedSample">샘플 넣기</button>
@@ -1029,7 +1105,9 @@ function buildMissionsEditor() {
     const teams = {};
     const quests = {};
     const num = el => (el.value.trim() === '' ? null : +el.value);
+    const mustWin = {};
     if (num($('#qcTarget'))) quests.company = { target: num($('#qcTarget')), actual: num($('#qcActual')) || 0 };
+    if (num($('#mwCompany'))) mustWin.company = num($('#mwCompany'));
     app.querySelectorAll('.trow').forEach((r, i) => {
       const name = $('.tName', r).value.trim();
       if (!name) return;
@@ -1042,12 +1120,15 @@ function buildMissionsEditor() {
       };
       const target = num($('.tqTarget', r));
       if (target) quests[r.dataset.id] = { target, actual: num($('.tqActual', r)) || 0 };
+      const mw = num($('.tMustWin', r));
+      if (mw) mustWin[r.dataset.id] = mw;
     });
     const ok = await save(store.set('meta', {
       expected: +$('#cExpected').value || 0,
       uncounted: $('#cUncounted').value.split(/[,，]/).map(s => s.trim()).filter(Boolean),
       questAsOf: $('#qAsOf').value.trim(),
       quests,
+      mustWin,
       company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim() },
       teams
     }));
@@ -1090,15 +1171,16 @@ async function seedSample() {
     (s.members || []).forEach((name, i) => { up[`${tid}/members/s${i}`] = { name, ts: t0 + i, sample: true }; });
     for (const q of QUESTIONS) {
       const list = s[q.id] || [];
-      list.forEach(([text, likes = 0], i) => {
+      // 샘플 한 장 = [글, 공감 수, 쓴 사람(없으면 팀원 중 차례로)]
+      list.forEach(([text, likes = 0, by], i) => {
         const l = {};
         for (let k = 0; k < likes; k++) l['s' + k] = true;
-        up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
+        up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: by || s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
       });
       // 공감 많은 순으로 전지에 붙여 둔다. 이미 찬 자리(사람이 붙인 것)는 건드리지 않고 빈 자리에만
       // (규칙이 찬 자리 덮어쓰기를 막아서, 하나라도 겹치면 샘플 전체가 저장되지 않는다)
       const usedPins = S.teams[tid]?.pins?.[q.id] || {};
-      const freePins = PIN_SLOTS.filter(k => !usedPins[k]);
+      const freePins = pinSlotsFor(q.id).filter(k => !usedPins[k]);
       const pinnedNotes = new Set(Object.values(usedPins).map(p => p?.note));
       list.map(([text, likes = 0], i) => ({ text, likes, i, note: `s_${q.id}_${i}` }))
         .filter(p => !pinnedNotes.has(p.note))
@@ -1108,7 +1190,8 @@ async function seedSample() {
           up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
         });
     }
-    // 실행 계획도 빈 자리에만. 샘플 한 줄 = [실행안, 담당, 기한, 확인할 숫자]
+    // 핵심 과제도 빈 자리에만. 샘플 한 줄 = [핵심 과제, 담당, 기한, 확인할 숫자]
+    // n번째 과제는 팀 전략 n번째 아이디어(s_q2_n)에서 올린 것으로 잇는다
     const usedPlan = S.teams[tid]?.plan || {};
     const freePlan = PLAN_SLOTS.filter(k => !usedPlan[k]);
     let posterRoom = PLAN.posterMax - posterPlansOf(tid).length;
@@ -1116,7 +1199,8 @@ async function seedSample() {
       const v = {};
       PLAN.fields.forEach((f, k) => { v[f.key] = String(row[k] || '').slice(0, f.max); });
       const onPoster = posterRoom-- > 0;
-      if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, onPoster, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
+      const from = (s.q2 || [])[i] ? { from: `s_q2_${i}` } : {};
+      if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, ...from, onPoster, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
   }
   try {
@@ -1161,9 +1245,10 @@ function teamRow(t) {
       <textarea class="tDeptMission" rows="2" placeholder="부서 미션">${esc(t.deptMission)}</textarea>
       <textarea class="tMission" rows="2" placeholder="팀·브랜드 미션 (없으면 비워 두기)">${esc(t.mission)}</textarea>
       <div class="tcol">
-        <label class="tExp">팀퀘스트 목표 <input class="tqTarget" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.target ?? '')}">억</label>
+        <label class="tExp">팀 퀘스트 목표 <input class="tqTarget" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.target ?? '')}">억</label>
         <label class="tExp">달성 <input class="tqActual" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.actual ?? '')}">억</label>
-        <span class="lbl">비우면 회사 목표와 같아요</span>
+        <label class="tExp">🔥 필사즉생 월 <input class="tMustWin" type="number" step="0.1" min="0" value="${esc(S.meta?.mustWin?.[t.id] ?? '')}">억</label>
+        <span class="lbl">퀘스트를 비우면 회사 목표·필사즉생과 같아요. 퀘스트가 따로 있는 팀은 필사즉생도 따로 적어요</span>
       </div>
       <button class="link" data-act="row-del">빼기</button>
     </div>`;
@@ -1200,8 +1285,8 @@ document.addEventListener('click', async e => {
       return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note.likes?.[uid] ? null : true));
     case 'promote': {
       if (!note || isPromoted(S.team, noteId)) return;
-      if (plansOf(S.team).length >= PLAN.max) return toast(`실행 계획은 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`);
-      const v = await planDialog('실행 계획으로 올리기', { what: note.text });
+      if (plansOf(S.team).length >= PLAN.max) return toast(`핵심 과제는 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`);
+      const v = await planDialog('핵심 과제로 올리기', { what: note.text });
       if (v) await addPlan(v, noteId);
       return;
     }
@@ -1226,7 +1311,7 @@ document.addEventListener('click', async e => {
       // 이 포스트잇으로 만든 실행 계획도 같이 지운다 (지우기 전에 알려 준다)
       const linkedPlans = Object.entries(S.teams[S.team]?.plan || {}).filter(([, p]) => p?.from === noteId);
       const msg = linkedPlans.length
-        ? `이 포스트잇을 지울까요?\n이 포스트잇으로 만든 실행 계획 ${linkedPlans.length}개도 함께 지워져요.`
+        ? `이 포스트잇을 지울까요?\n이 포스트잇으로 만든 핵심 과제 ${linkedPlans.length}개도 함께 지워져요.`
         : '이 포스트잇을 지울까요?';
       if (!confirm(msg)) return;
       // 포스트잇·전지 자리·실행 계획을 한 번에 지운다 (일부만 지워지는 일이 없게)
@@ -1247,9 +1332,9 @@ document.addEventListener('click', async e => {
     case 'plan-edit': {
       const p = S.teams[S.team]?.plan?.[planId];
       if (!p) return;
-      const v = await planDialog('실행 계획 고치기', p);
+      const v = await planDialog('핵심 과제 고치기', p);
       if (!v) return;
-      if (!S.teams[S.team]?.plan?.[planId]) return toast('그사이 이 계획이 지워졌어요');
+      if (!S.teams[S.team]?.plan?.[planId]) return toast('그사이 이 과제가 지워졌어요');
       return save(store.update(`${teamPath}/plan/${planId}`, v));
     }
     case 'plan-poster': {
@@ -1260,7 +1345,7 @@ document.addEventListener('click', async e => {
       return save(store.update(`${teamPath}/plan/${planId}`, { onPoster: !on }));
     }
     case 'plan-del':
-      if (planId && confirm('이 실행 계획을 지울까요?')) save(store.remove(`${teamPath}/plan/${planId}`));
+      if (planId && confirm('이 핵심 과제를 지울까요?')) save(store.remove(`${teamPath}/plan/${planId}`));
       return;
     case 'plan-up':
     case 'plan-down': {
@@ -1276,11 +1361,16 @@ document.addEventListener('click', async e => {
     case 'stage': {
       const step = +el.dataset.step;
       startStep(step);
-      if (step === 0) openJoinOverlay(); // 접속·안내 단계: QR을 화면 가운데에 크게
+      // 접속 안내 단계는 QR을, 나머지는 그 단계 안내를 화면 가운데에 크게
+      if ($('#guideOverlay')) $('#guideOverlay').hidden = true;
+      if (step === 0) openJoinOverlay(); else openGuide(step);
       return;
     }
     case 'join-qr': return openJoinOverlay();
     case 'join-qr-close': $('#joinOverlay').hidden = true; return;
+    case 'guide': return openGuide(Math.max(1, S.stage?.step ?? 1));
+    case 'guide-go': return openGuide(+el.dataset.step);
+    case 'guide-close': $('#guideOverlay').hidden = true; return;
     case 'stage-prev': return startStep(Math.max(0, (S.stage?.step ?? 1) - 1));
     case 'stage-next': return startStep(Math.min(AGENDA.length - 1, (S.stage?.step ?? -1) + 1));
     case 'stage-plus': {
