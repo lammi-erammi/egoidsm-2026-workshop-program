@@ -310,6 +310,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .gd-grid h4 { font-size: 16px; color: var(--ink-3); margin: 0 0 8px; }
 .gd-grid ul { margin: 0 0 16px; padding-left: 22px; font-size: clamp(16px, 1.8vw, 20px); line-height: 1.7; word-break: keep-all; }
 .gd-good li::marker { color: var(--ok); }
+.gd-ex-line { display: block; font-size: .92em; color: var(--ink-2); }
 .gd-bad { color: var(--ink-2); }
 .gd-bad li::marker { color: var(--bad); }
 /* 단계 안내: 제목 옆 큰 타이머 + 구간(진행자 설명 → 혼자 쓰기 → 나머지) */

@@ -396,7 +396,12 @@ function openGuide(i) {
   }
   const g = a.guide;
   const qs = [].concat(a.focus || []).map(f => QUESTIONS.find(q => q.id === f)).filter(Boolean);
-  const list = (arr, cls) => arr?.length ? `<ul class="${cls}">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  // 여러 줄 예시(\n)는 첫 줄을 굵게, 나머지는 한 줄씩 작게
+  const item = x => {
+    const [head, ...rest] = String(x).split('\n');
+    return rest.length ? `<b>${esc(head)}</b>${rest.map(r => `<span class="gd-ex-line">${esc(r)}</span>`).join('')}` : esc(x);
+  };
+  const list = (arr, cls) => arr?.length ? `<ul class="${cls}">${arr.map(x => `<li>${item(x)}</li>`).join('')}</ul>` : '';
   ov.dataset.step = i;
   ov.innerHTML = `
     <div class="gd-card">
@@ -405,7 +410,7 @@ function openGuide(i) {
         <div>
           <p class="eyebrow">진행 순서 ${i + 1} / ${AGENDA.length} · 모두 ${a.minutes}분</p>
           <h1>${esc(a.title)}</h1>
-          ${qs.length ? `<p class="gd-q">${qs.map(q => `${esc(q.short)} 칸: ${esc(q.text)}`).join('<br>')}</p>` : ''}
+          ${qs.length ? `<p class="gd-q">${qs.map(q => esc(q.text)).join('<br>')}</p>` : ''}
         </div>
         <div class="gd-timer"><div id="gdClock" class="gd-clock">--:--</div></div>
       </div>
@@ -725,7 +730,7 @@ function updateBoard() {
         <div class="pbody">
           ${on ? '<span class="pin-badge">🖼 전지에 들어감</span>' : ''}
           <div class="pwhat">${esc(p.what)}</div>
-          <div class="pmeta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
+          <div class="pmeta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
         </div>
         <span class="aact">
           ${on
@@ -773,7 +778,7 @@ function noteHtml(n, pinSlot, pinsFull) {
         ${!max ? '' : pinSlot
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
           : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 칸은 ${max}장이 다 찼어요"` : `title="A1 전지에 붙여요 (이 칸은 ${max}장까지)"`}>📌 전지에 붙이기</button>`}
-        ${n.q === 'q2' ? `<button class="pin ${promoted ? 'on' : ''}" data-act="promote" title="이 아이디어를 '${esc(PLAN.title)}'로 올려요 (담당·기한·숫자를 채워요)">${promoted ? '⭐ 과제에 있음' : '⭐ 핵심 과제로'}</button>` : ''}
+        ${n.q === 'q2' ? `<button class="pin ${promoted ? 'on' : ''}" data-act="promote" title="이 아이디어를 '${esc(PLAN.title)}'로 올려요 (담당자·마감일·숫자를 채워요)">${promoted ? '⭐ 과제에 있음' : '⭐ 핵심 과제로'}</button>` : ''}
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
@@ -1112,7 +1117,7 @@ function posterHtml(teamId) {
             <li style="--c:${colors[i % colors.length]}">
               <span class="p-n">${i + 1}</span>
               <div><div class="p-what">${esc(p.what)}</div>
-              <div class="p-meta"><span>담당 <b>${esc(p.who)}</b></span><span>기한 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
+              <div class="p-meta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
             </li>`).join('') || '<li class="empty">🖼 전지에 넣을 핵심 과제를 골라 주세요</li>'}
         </ol>
       </div>
