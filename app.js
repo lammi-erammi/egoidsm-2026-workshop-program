@@ -299,8 +299,6 @@ function renderGuideTimer(st, left) {
     big.textContent = ph ? fmtClock(ph.left) : '--:--';
     big.className = 'gd-clock' + (ph && ph.left < 0 ? ' over' : ph && ph.left < 15000 ? ' soon' : '') + (st?.pausedLeft != null ? ' paused' : '');
   }
-  const now = $('#gdNowLabel');
-  if (now) now.textContent = ph ? `${ph.phase.label}${ph.index < ph.list.length - 1 ? ` → 다음: ${ph.list[ph.index + 1].label}` : ''}` : '아직 시작 전이에요 · 아래 \'이 단계 시작\'을 누르면 타이머가 흘러요';
 }
 
 // 지금 단계의 칸을 강조하고, 나머지 칸은 살짝 흐리게 한다
@@ -409,9 +407,9 @@ function openGuide(i) {
           <h1>${esc(a.title)}</h1>
           ${qs.length ? `<p class="gd-q">${qs.map(q => `${esc(q.short)} 칸: ${esc(q.text)}`).join('<br>')}</p>` : ''}
         </div>
-        <div class="gd-timer"><div id="gdClock" class="gd-clock">--:--</div><div id="gdNowLabel" class="gd-now-label"></div></div>
+        <div class="gd-timer"><div id="gdClock" class="gd-clock">--:--</div></div>
       </div>
-      <p class="gd-goal">🎯 ${esc(g.goal)}</p>
+      <div class="gd-goal">${br(g.goal)}${g.note ? `<small class="gd-note">${esc(g.note)}</small>` : ''}</div>
       <div class="gd-phases" id="gdTimer" data-step="${i}">
         ${phasesOf(a).map((p, k) => `
           <div class="gd-phase ${p.key}" data-phase="${p.key}" data-act="phase-jump" data-step="${i}" data-k="${k}" title="눌러서 이 구간부터 타이머 시작">
@@ -419,7 +417,6 @@ function openGuide(i) {
             ${list((g.flow || {})[p.key], 'gd-do')}
           </div>`).join('')}
       </div>
-      <p class="gd-tip">설명이 일찍 끝나면 다음 구간 상자를 눌러요. 타이머가 그 구간 처음부터 흘러요.</p>
       <div class="gd-grid">
         ${g.good?.length || g.bad?.length ? `<section>
           ${g.good?.length ? `<h4>👍 좋은 예</h4>${list(g.good, 'gd-good')}` : ''}
