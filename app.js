@@ -1341,6 +1341,14 @@ async function seedSample() {
   } catch {
     return toast(pasted ? '샘플 JSON 모양이 맞지 않아요' : '아래 칸에 sample.local.json 내용을 붙여 넣고 다시 눌러 주세요');
   }
+  // 예전 샘플이 남아 있으면 먼저 지운다. 남겨 두면 같은 이름의 포스트잇만 새 글로 바뀌고
+  // 전지 자리·핵심 과제는 예전 것이 남아서 번호가 엇갈린다 (찬 자리는 규칙상 덮어쓸 수 없어 따로 먼저 지움)
+  const old = sampleCleanup(Object.keys(src).filter(teamOf));
+  if (Object.keys(old).length) {
+    try { await store.update('teams', old); }
+    catch (err) { console.error(err); return toast('예전 샘플을 지우지 못했어요. 진행자 로그인을 확인해 주세요'); }
+  }
+  const kept = (path, v) => v && !(path in old); // 지금 지운 샘플 자리는 빈 자리로 본다
   const t0 = now() - 3600000;
   const up = {};
   for (const [tid, s] of Object.entries(src)) {
@@ -1356,7 +1364,7 @@ async function seedSample() {
       });
       // 공감 많은 순으로 전지에 붙여 둔다. 이미 찬 자리(사람이 붙인 것)는 건드리지 않고 빈 자리에만
       // (규칙이 찬 자리 덮어쓰기를 막아서, 하나라도 겹치면 샘플 전체가 저장되지 않는다)
-      const usedPins = S.teams[tid]?.pins?.[q.id] || {};
+      const usedPins = Object.fromEntries(Object.entries(S.teams[tid]?.pins?.[q.id] || {}).filter(([k, v]) => kept(`${tid}/pins/${q.id}/${k}`, v)));
       const freePins = pinSlotsFor(q.id).filter(k => !usedPins[k]);
       const pinnedNotes = new Set(Object.values(usedPins).map(p => p?.note));
       list.map(([text, likes = 0], i) => ({ text, likes, i, note: `s_${q.id}_${i}` }))
@@ -1370,8 +1378,8 @@ async function seedSample() {
     // 핵심 과제도 빈 자리에만. 샘플 한 줄 = [핵심 과제, 담당, 기한, 확인할 숫자]
     // n번째 과제는 팀 전략 n번째 아이디어(s_q2_n)에서 올린 것으로 잇는다
     const usedPlan = S.teams[tid]?.plan || {};
-    const freePlan = PLAN_SLOTS.filter(k => !usedPlan[k]);
-    let posterRoom = PLAN.posterMax - posterPlansOf(tid).length;
+    const freePlan = PLAN_SLOTS.filter(k => !kept(`${tid}/plan/${k}`, usedPlan[k]));
+    let posterRoom = PLAN.posterMax - posterPlansOf(tid).filter(p => !(`${tid}/plan/${p.id}` in old)).length;
     (s.plan || []).slice(0, freePlan.length).forEach((row, i) => {
       const v = {};
       PLAN.fields.forEach((f, k) => { v[f.key] = String(row[k] || '').slice(0, f.max); });
@@ -1390,7 +1398,7 @@ async function seedSample() {
   }
   try {
     await store.update('teams', up);
-    toast('샘플을 넣었어요. 이미 사람이 쓴 자리는 그대로 두고 빈 자리에만 넣었어요');
+    toast('샘플을 넣었어요. 예전 샘플은 지우고, 사람이 쓴 자리는 그대로 두었어요');
   } catch (err) {
     console.error(err);
     toast('샘플을 넣지 못했어요. 진행자 로그인과 파이어베이스 규칙 게시를 확인해 주세요');
@@ -1399,8 +1407,16 @@ async function seedSample() {
 
 async function clearSample() {
   if (!confirm('샘플로 넣은 내용만 지울까요? (사람들이 적은 내용은 남아요)')) return;
+  const up = sampleCleanup(Object.keys(S.teams));
+  if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
+  if (await save(store.update('teams', up))) toast('샘플을 지웠어요');
+}
+
+// 팀들의 샘플 흔적을 지우는 경로 묶음 { 'gulgang/notes/s_q1_0': null, … }
+function sampleCleanup(teamIds) {
   const up = {};
-  for (const [tid, d] of Object.entries(S.teams)) {
+  for (const tid of teamIds) {
+    const d = S.teams[tid] || {};
     for (const part of ['notes', 'plan', 'agree', 'members']) {
       for (const [id, v] of Object.entries(d[part] || {})) if (v?.sample) up[`${tid}/${part}/${id}`] = null;
     }
@@ -1415,8 +1431,7 @@ async function clearSample() {
       if (!p?.sample && p?.from && d.notes?.[p.from]?.sample) up[`${tid}/plan/${id}`] = null;
     }
   }
-  if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
-  if (await save(store.update('teams', up))) toast('샘플을 지웠어요');
+  return up;
 }
 
 function teamRow(t) {
