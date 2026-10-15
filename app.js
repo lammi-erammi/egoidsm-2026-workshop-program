@@ -1379,10 +1379,11 @@ async function seedSample() {
       const from = (s.q2 || [])[i] ? { from: `s_q2_${i}` } : {};
       if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, ...from, onPoster, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
-    // 샘플 실행안 "[결산] …"은 과제 이름에 '결산'이 들어간 첫 핵심 과제와 잇는다
-    (s.q3 || []).forEach(([text], i) => {
+    // 샘플 실행안 = [글, 공감, 쓴 사람, 이어진 과제 번호(0부터)]. 번호가 없으면 "[결산] …"처럼
+    // 앞머리 말이 과제 이름에 들어간 첫 핵심 과제와 잇는다
+    (s.q3 || []).forEach(([text, , , idx], i) => {
       const key = String(text).match(/^\[([^\]]+)\]/)?.[1]?.trim();
-      const j = key ? (s.plan || []).findIndex(row => String(row[0] || '').includes(key)) : -1;
+      const j = Number.isInteger(idx) ? idx : key ? (s.plan || []).findIndex(row => String(row[0] || '').includes(key)) : -1;
       const note = up[`${tid}/notes/s_q3_${i}`];
       if (note && j >= 0 && j < freePlan.length && up[`${tid}/plan/${freePlan[j]}`]) Object.assign(note, { plan: freePlan[j], planTs: t0 + j });
     });
