@@ -537,6 +537,7 @@ function buildBoard() {
             <div class="col-head"><span class="qnum">${i + 1}</span><p>${esc(q.text)}</p></div>
             ${i < 2 ? `<div id="gapBox-${q.id}"></div>` : ''}
             <div class="pin-count" id="pins-${q.id}"></div>
+            ${q.id === 'q3' ? '<div class="plan-pick" id="planPick"></div>' : ''}
             <form class="composer" data-q="${q.id}">
               <textarea rows="2" maxlength="500" placeholder="생각을 적고 Enter로 붙이기"></textarea>
               <button class="btn primary">붙이기</button>
@@ -708,9 +709,10 @@ function updateBoard() {
     const list = sortNotes(notes.filter(n => n.q === q.id))
       .map(n => ({ n, slot: pinSlotOf(S.team, q.id, n.id) }))
       .sort((a, b) => (b.slot || isPromoted(S.team, b.n.id) ? 1 : 0) - (a.slot || isPromoted(S.team, a.n.id) ? 1 : 0));
-    $(`#pins-${q.id}`).innerHTML = max
+    $(`#pins-${q.id}`).innerHTML = (max
       ? `📌 전지에 붙인 포스트잇 <b>${pins.length}/${max}</b>` + (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '')
-      : `⭐ 핵심 과제로 올린 아이디어 <b>${list.filter(x => isPromoted(S.team, x.n.id)).length}</b>개 <span class="lbl">— 포스트잇의 '핵심 과제로'를 눌러 아래 '${esc(PLAN.title)}'로 확정해요</span>`;
+      : `⭐ 핵심 과제로 올린 아이디어 <b>${list.filter(x => isPromoted(S.team, x.n.id)).length}</b>개 <span class="lbl">— 포스트잇의 '핵심 과제로'를 눌러 아래 '${esc(PLAN.title)}'로 확정해요</span>`)
+      + (q.id === 'q3' ? planTallyHtml(S.team, pins) : '');
     $(`#notes-${q.id}`).innerHTML = list.length
       ? list.map(({ n, slot }) => noteHtml(n, slot, full)).join('')
       : '<p class="empty">아직 붙은 포스트잇이 없어요</p>';
@@ -756,8 +758,19 @@ function updateBoard() {
     ? `<span class="lbl">함께한 사람</span>${members.map(m => `<span class="sign">${esc(m.name)}</span>`).join('')}`
     : '';
 
+  renderPlanPick();
   renderLivePreview();
   cleanupDeadPins(S.team);
+}
+
+// 과제별로 전지에 붙은 실행안 수 (0장인 과제는 ⚠ — 누가 맡을지 정해야 함)
+function planTallyHtml(teamId, pins) {
+  const list = posterPlansOf(teamId);
+  if (!list.length) return '';
+  const notes = S.teams[teamId]?.notes || {};
+  const cnt = list.map(p => pins.filter(x => linkOf(teamId, notes[x.note])?.plan.id === p.id).length);
+  return `<div class="plan-tally"><span class="lbl">과제별 전지 실행안</span>${list.map((p, k) =>
+    `<span class="pt ${cnt[k] ? '' : 'zero'}" style="--c:${PLAN_COLORS[k]}" title="${esc(p.what)}"><i>${k + 1}</i>${cnt[k]}장${cnt[k] ? '' : ' ⚠'}</span>`).join('')}</div>`;
 }
 
 function noteHtml(n, pinSlot, pinsFull) {
@@ -767,9 +780,14 @@ function noteHtml(n, pinSlot, pinsFull) {
   const pinText = pinSlot ? S.teams[S.team]?.pins?.[n.q]?.[pinSlot]?.text : '';
   const max = pinMaxOf(n.q);
   const promoted = isPromoted(S.team, n.id);
+  const ln = n.q === 'q3' ? linkOf(S.team, n) : null;
+  const planTag = n.q !== 'q3' ? ''
+    : ln ? `<div class="note-plan" style="--c:${ln.color}"><i>${ln.num ?? '·'}</i>${esc(ln.plan.what)}${ln.num ? '' : ' (전지 밖 과제)'}</div>`
+    : '<div class="note-plan none"><i>?</i>이어진 핵심 과제가 없어요</div>';
   return `
     <div class="note ${esc(n.q)} ${n.uid === uid ? 'mine' : ''} ${pinSlot || promoted ? 'pinned' : ''}" data-id="${esc(n.id)}">
       ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : promoted ? '<span class="pin-badge">⭐ 핵심 과제</span>' : ''}
+      ${planTag}
       <div class="note-text">${br(n.text)}</div>
       ${pinSlot && pinText !== n.text ? `<div class="pin-text">전지에는: “${esc(pinText)}”</div>` : ''}
       <div class="note-foot">
@@ -779,6 +797,7 @@ function noteHtml(n, pinSlot, pinsFull) {
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
           : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 칸은 ${max}장이 다 찼어요"` : `title="A1 전지에 붙여요 (이 칸은 ${max}장까지)"`}>📌 전지에 붙이기</button>`}
         ${n.q === 'q2' ? `<button class="pin ${promoted ? 'on' : ''}" data-act="promote" title="이 아이디어를 '${esc(PLAN.title)}'로 올려요 (담당자·마감일·숫자를 채워요)">${promoted ? '⭐ 과제에 있음' : '⭐ 핵심 과제로'}</button>` : ''}
+        ${mine && n.q === 'q3' ? '<button class="link" data-act="relink" title="위에서 고른 핵심 과제로 바꿔요">과제 바꾸기</button>' : ''}
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
       </div>
     </div>`;
@@ -867,6 +886,31 @@ const PLAN_SLOTS = Array.from({ length: PLAN.max }, (_, i) => 'r' + (i + 1));
 const isPlan = p => p && PLAN.fields.every(f => typeof p[f.key] === 'string' && p[f.key].trim());
 const plansOf = teamId => listOf(S.teams[teamId]?.plan).filter(isPlan).sort((a, b) => (a.order ?? a.ts) - (b.order ?? b.ts));
 const posterPlansOf = teamId => plansOf(teamId).filter(p => p.onPoster).slice(0, PLAN.posterMax);
+// 전지에 넣은 핵심 과제 1~5번의 색 (전지 가운데 번호 동그라미와 실행안 포스트잇의 번호가 같은 색)
+const PLAN_COLORS = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
+
+// ── 내 실행안(q3) ↔ 팀 핵심 과제 ──
+// 실행안 포스트잇에 과제 자리(plan)와 그 과제가 만들어진 시각(planTs)을 같이 적는다.
+// 과제를 지우고 같은 자리에 새 과제가 들어와도 예전 실행안이 엉뚱하게 이어지지 않게 시각까지 맞춰 본다.
+function linkOf(teamId, n) {
+  if (!n?.plan) return null;
+  const p = plansOf(teamId).find(x => x.id === n.plan && x.ts === n.planTs);
+  if (!p) return null;
+  const k = posterPlansOf(teamId).findIndex(x => x.id === p.id);
+  return { plan: p, num: k >= 0 ? k + 1 : null, color: k >= 0 ? PLAN_COLORS[k % PLAN_COLORS.length] : '#9ca3af' };
+}
+// 실행안을 쓰기 전에 고른 과제 (이 기기에서만 기억)
+let pickPlan = null;
+function renderPlanPick() {
+  const box = $('#planPick');
+  if (!box) return;
+  const list = posterPlansOf(S.team);
+  if (pickPlan && !list.some(p => p.id === pickPlan.id && p.ts === pickPlan.ts)) pickPlan = null;
+  box.innerHTML = list.length
+    ? `<div class="lbl">어느 핵심 과제를 위한 일인가요? 먼저 고르고 써요</div>
+       <div class="pp-list">${list.map((p, k) => `<button type="button" class="pp ${pickPlan?.id === p.id ? 'on' : ''}" data-act="pick-plan" data-id="${esc(p.id)}" style="--c:${PLAN_COLORS[k]}"><i>${k + 1}</i><span>${esc(p.what)}</span></button>`).join('')}</div>`
+    : '<div class="lbl">④단계에서 전지에 넣을 핵심 과제(🖼)를 고르면, 여기서 과제를 골라 실행안을 써요</div>';
+}
 
 // 실행 계획 입력 창: 네 칸을 채우면 값, 취소하면 null
 function planDialog(title, values = {}) {
@@ -1087,7 +1131,7 @@ function posterHtml(teamId) {
   const c = S.meta.company || {};
   const plans = posterPlansOf(teamId);
   const members = membersOf(teamId);
-  const colors = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
+  const colors = PLAN_COLORS;
   const cq = questOf(''), tq = questOf(teamId);
   return `
     <div class="poster" style="--sticky:${STICKY_MAX}pt;--plan:${PLAN_MAX}pt">
@@ -1131,9 +1175,14 @@ function posterHtml(teamId) {
               const pins = pinsOf(teamId, q.id);
               if (!pins.length) return '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>';
               const notes = S.teams[teamId]?.notes || {};
-              return pinSlotsFor(q.id).map((_, k) => pins[k]
-                ? `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span>${q.id === 'q3' && notes[pins[k].note]?.name ? `<em>${esc(notes[pins[k].note].name)}</em>` : ''}</div>`
-                : '<div class="p-slot"></div>').join('');
+              // 실행안은 아래 줄에 이어진 핵심 과제 번호(전지 가운데와 같은 색) + 쓴 사람 이름
+              return pinSlotsFor(q.id).map((_, k) => {
+                if (!pins[k]) return '<div class="p-slot"></div>';
+                const n = notes[pins[k].note], ln = q.id === 'q3' ? linkOf(teamId, n) : null;
+                const foot = q.id === 'q3'
+                  ? `<em>${ln?.num ? `<i style="--c:${ln.color}">${ln.num}</i>` : '<i class="none"></i>'}<b>${esc(n?.name || '')}</b></em>` : '';
+                return `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span>${foot}</div>`;
+              }).join('');
             })()}</div>
           </div>`).join('')}
       </div>` : '<div class="p-spacer"></div>'}
@@ -1296,6 +1345,13 @@ async function seedSample() {
       const from = (s.q2 || [])[i] ? { from: `s_q2_${i}` } : {};
       if (isPlan(v)) up[`${tid}/plan/${freePlan[i]}`] = { ...v, ...from, onPoster, name: '샘플', uid: 'sample', ts: t0 + i, order: t0 + i, sample: true };
     });
+    // 샘플 실행안 "[결산] …"은 과제 이름에 '결산'이 들어간 첫 핵심 과제와 잇는다
+    (s.q3 || []).forEach(([text], i) => {
+      const key = String(text).match(/^\[([^\]]+)\]/)?.[1]?.trim();
+      const j = key ? (s.plan || []).findIndex(row => String(row[0] || '').includes(key)) : -1;
+      const note = up[`${tid}/notes/s_q3_${i}`];
+      if (note && j >= 0 && j < freePlan.length && up[`${tid}/plan/${freePlan[j]}`]) Object.assign(note, { plan: freePlan[j], planTs: t0 + j });
+    });
   }
   try {
     await store.update('teams', up);
@@ -1350,7 +1406,7 @@ function teamRow(t) {
 
 // ── 클릭·입력 처리 ──────────────────────────────────────────
 // 참가자는 자기 팀 전지만 고칠 수 있다 (다른 팀 전지는 '전체 팀'에서 구경만). 진행자는 모든 팀
-const EDIT_ACTS = new Set(['like', 'promote', 'edit', 'del', 'pin', 'unpin', 'plan-edit', 'plan-del', 'plan-up', 'plan-down', 'plan-poster']);
+const EDIT_ACTS = new Set(['pick-plan', 'relink', 'like', 'promote', 'edit', 'del', 'pin', 'unpin', 'plan-edit', 'plan-del', 'plan-up', 'plan-down', 'plan-poster']);
 const canEditTeam = () => S.admin || S.team === me.team;
 
 document.addEventListener('click', async e => {
@@ -1377,6 +1433,18 @@ document.addEventListener('click', async e => {
     case 'like':
       if (!note) return;
       return save(store.set(`${teamPath}/notes/${noteId}/likes/${uid}`, note.likes?.[uid] ? null : true));
+    case 'pick-plan': {
+      const p = posterPlansOf(S.team).find(x => x.id === el.dataset.id);
+      pickPlan = !p || pickPlan?.id === p.id ? null : { id: p.id, ts: p.ts };
+      renderPlanPick();
+      if (pickPlan) $('.composer[data-q="q3"] textarea')?.focus();
+      return;
+    }
+    case 'relink': {
+      if (!note) return;
+      if (!pickPlan) return toast('3번 칸 위에서 바꿀 핵심 과제를 먼저 고르고 눌러 주세요');
+      return save(store.update(`${teamPath}/notes/${noteId}`, { plan: pickPlan.id, planTs: pickPlan.ts }));
+    }
     case 'promote': {
       if (!note || isPromoted(S.team, noteId)) return;
       if (plansOf(S.team).length >= PLAN.max) return toast(`핵심 과제는 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`);
@@ -1534,7 +1602,18 @@ document.addEventListener('submit', e => {
   const text = input.value.trim();
   if (!text || !S.team) return;
   if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
-  store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now() });
+  // 내 실행안은 어느 핵심 과제를 위한 일인지 골라야 붙는다 (전지에 넣은 과제가 아직 없으면 그냥 붙인다)
+  const link = {};
+  if (form.dataset.q === 'q3' && posterPlansOf(S.team).length) {
+    if (!pickPlan) {
+      toast('어느 핵심 과제를 위한 일인지 위에서 먼저 골라 주세요');
+      const box = $('#planPick');
+      box?.classList.remove('nudge'); void box?.offsetWidth; box?.classList.add('nudge');
+      return;
+    }
+    Object.assign(link, { plan: pickPlan.id, planTs: pickPlan.ts });
+  }
+  store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now(), ...link });
   input.value = '';
   input.focus();
 });
