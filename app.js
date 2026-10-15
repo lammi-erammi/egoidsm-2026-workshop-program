@@ -1073,9 +1073,9 @@ function measuredPoster(teamId) {
   return holder;
 }
 
-// 1) 실행 계획 글씨: 크게 쓰되, 아래 포스트잇 칸이 PLAN_ROOM_MM 보다 좁아지면 조금씩 줄인다
-// 2) 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기로 맞춘다 (세 칸 모두 같은 크기)
-const PLAN_MAX = 54, PLAN_MIN = 40, PLAN_ROOM_MM = 215;
+// 1) 핵심 과제·실행안 글씨: 핵심 과제 칸에 다 들어가는 가장 큰 크기 (같이 2pt씩 줄인다)
+// 2) 원인 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기
+const PLAN_MAX = 54, PLAN_KEEP = 42, PLAN_MIN = 36, ACT_MAX = 30, ACT_MIN = 18;
 const STICKY_MAX = 36, STICKY_MIN = 20;
 function fitStickies(poster) {
   if (!poster) return;
@@ -1089,17 +1089,21 @@ function fitStickies(poster) {
       poster.style.setProperty('--title', size + 'pt');
     }
   }
-  const notes = poster.querySelector('.p-notes');
-  if (notes) {
-    const mm = poster.offsetWidth / 596;
-    let size = PLAN_MAX;
-    poster.style.setProperty('--plan', size + 'pt');
-    while (size > PLAN_MIN && notes.offsetHeight < PLAN_ROOM_MM * mm) {
-      size -= 2;
-      poster.style.setProperty('--plan', size + 'pt');
+  // 1) 핵심 과제 칸(과제 + 그 아래 실행안)이 남은 높이 안에 들어가는 가장 큰 글씨
+  const plan = poster.querySelector('.p-plan');
+  if (plan) {
+    let size = PLAN_MAX, act = ACT_MAX;
+    const set = () => { poster.style.setProperty('--plan', size + 'pt'); poster.style.setProperty('--act', act + 'pt'); };
+    set();
+    // 과제 글씨를 PLAN_KEEP까지 먼저 줄이고, 그래도 넘치면 실행안 글씨, 마지막으로 과제 글씨를 더 줄인다
+    while ((size > PLAN_MIN || act > ACT_MIN) && plan.scrollHeight > plan.clientHeight + 1) {
+      if (size > PLAN_KEEP) size -= 2;
+      else if (act > ACT_MIN) act -= 2;
+      else size -= 2;
+      set();
     }
   }
-  const cols = [...poster.querySelectorAll('.p-col')];
+  const cols = [...poster.querySelectorAll('.p-sec')];
   if (!cols.length) return;
   // 칸이 넘치지 않고, 포스트잇 한 장 한 장 안에서도 글이 넘치지 않는 크기
   const stickies = [...poster.querySelectorAll('.p-sticky')];
@@ -1125,6 +1129,53 @@ window.addEventListener('resize', () => {
   if (S.built.startsWith('board:')) renderLivePreview();
 });
 
+// 전지의 포스트잇 줄: 원인(q1)은 미션 박스 바로 아래 한 줄, 실행안(q3)은 핵심 과제 아래 4장씩 두 줄
+// 질문마다 pinMax 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
+function posterSection(teamId, qid, num) {
+  const q = QUESTIONS.find(x => x.id === qid);
+  if (!q || !pinMaxOf(qid)) return '';
+  const pins = pinsOf(teamId, qid);
+  const notes = S.teams[teamId]?.notes || {};
+  const body = !pins.length
+    ? '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>'
+    : pinSlotsFor(qid).map((_, k) => {
+      if (!pins[k]) return '<div class="p-slot"></div>';
+      // 실행안은 아래 줄에 이어진 핵심 과제 번호(전지 가운데와 같은 색) + 쓴 사람 이름
+      const n = notes[pins[k].note], ln = qid === 'q3' ? linkOf(teamId, n) : null;
+      const foot = qid === 'q3'
+        ? `<em>${ln?.num ? `<i style="--c:${ln.color}">${ln.num}</i>` : '<i class="none"></i>'}<b>${esc(n?.name || '')}</b></em>` : '';
+      return `<div class="p-sticky ${qid}"><span>${br(pins[k].text)}</span>${foot}</div>`;
+    }).join('');
+  return `
+    <div class="p-sec ${qid}">
+      <div class="p-q"><span>${num}</span>${esc(q.poster || q.short)}</div>
+      <div class="p-stickies">${body}</div>
+    </div>`;
+}
+
+// 전지에 붙인 실행안(q3)을 이어진 핵심 과제별로 모은다. 전지 밖 과제·과제 없음은 null 묶음
+function actsByPlan(teamId) {
+  const notes = S.teams[teamId]?.notes || {};
+  const map = new Map();
+  for (const pin of pinsOf(teamId, 'q3')) {
+    const n = notes[pin.note], ln = linkOf(teamId, n);
+    const key = ln?.num ? ln.plan.id : null;
+    if (!map.has(key)) map.set(key, []);
+    // 과제 아래에 모이니 앞머리 "[과제 이름]"은 뺀다
+    map.get(key).push({ text: String(pin.text).replace(/^\s*\[[^\]]*\]\s*/, '') || pin.text, name: n?.name || '' });
+  }
+  return map;
+}
+// 실행안 카드: 왼쪽 띠는 과제 색, 바탕은 그 색을 아주 옅게 (PDF에서도 같은 색이 나오게 직접 섞는다)
+const tint = (hex, a) => {
+  const v = parseInt(hex.slice(1), 16), mix = c => Math.round(c * a + 255 * (1 - a));
+  return `rgb(${mix(v >> 16)}, ${mix((v >> 8) & 255)}, ${mix(v & 255)})`;
+};
+function actsHtml(list, color) {
+  if (!list?.length) return '';
+  return `<div class="p-acts">${list.map(a => `<span class="p-act" style="border-left-color:${color};background:${tint(color, .12)}"><span>${esc(a.text)}</span>${a.name ? `<b>${esc(a.name)}</b>` : ''}</span>`).join('')}</div>`;
+}
+
 function posterHtml(teamId) {
   const t = teamOf(teamId);
   if (!t) return '<div class="poster"></div>';
@@ -1133,6 +1184,7 @@ function posterHtml(teamId) {
   const members = membersOf(teamId);
   const colors = PLAN_COLORS;
   const cq = questOf(''), tq = questOf(teamId);
+  const acts = actsByPlan(teamId);
   return `
     <div class="poster" style="--sticky:${STICKY_MAX}pt;--plan:${PLAN_MAX}pt">
       <h1 class="p-title"><span class="p-team">${esc(t.name)}</span>목표 달성 실행 계획</h1>
@@ -1154,6 +1206,7 @@ function posterHtml(teamId) {
           ${mustWinLine(teamId, 'p-must')}
         </div>
       </div>
+      ${S.posterNotes ? posterSection(teamId, 'q1', 1) : ''}
       <div class="p-plan">
         <h2>${esc(PLAN.title)}</h2>
         <ol>
@@ -1161,31 +1214,12 @@ function posterHtml(teamId) {
             <li style="--c:${colors[i % colors.length]}">
               <span class="p-n">${i + 1}</span>
               <div><div class="p-what">${esc(p.what)}</div>
-              <div class="p-meta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div></div>
+              <div class="p-meta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
+              ${S.posterNotes ? actsHtml(acts.get(p.id), colors[i % colors.length]) : ''}</div>
             </li>`).join('') || '<li class="empty">🖼 전지에 넣을 핵심 과제를 골라 주세요</li>'}
         </ol>
+        ${S.posterNotes && acts.get(null)?.length ? `<div class="p-etc"><b>그 밖의 실행안</b>${actsHtml(acts.get(null), '#9ca3af')}</div>` : ''}
       </div>
-      ${S.posterNotes ? `
-      <div class="p-notes">
-        ${QUESTIONS.filter(q => pinMaxOf(q.id)).map((q, n) => `
-          <div class="p-col ${q.id}">
-            <div class="p-q"><span>${n + 1}</span>${esc(q.poster || q.short)}</div>
-            <div class="p-stickies">${(() => {
-              // 질문마다 pinMax 칸짜리 같은 크기 판. 고른 포스트잇이 적어도 칸 자리는 그대로 둔다
-              const pins = pinsOf(teamId, q.id);
-              if (!pins.length) return '<div class="p-empty">📌 전지에 붙일 포스트잇을 골라 주세요</div>';
-              const notes = S.teams[teamId]?.notes || {};
-              // 실행안은 아래 줄에 이어진 핵심 과제 번호(전지 가운데와 같은 색) + 쓴 사람 이름
-              return pinSlotsFor(q.id).map((_, k) => {
-                if (!pins[k]) return '<div class="p-slot"></div>';
-                const n = notes[pins[k].note], ln = q.id === 'q3' ? linkOf(teamId, n) : null;
-                const foot = q.id === 'q3'
-                  ? `<em>${ln?.num ? `<i style="--c:${ln.color}">${ln.num}</i>` : '<i class="none"></i>'}<b>${esc(n?.name || '')}</b></em>` : '';
-                return `<div class="p-sticky ${q.id}"><span>${br(pins[k].text)}</span>${foot}</div>`;
-              }).join('');
-            })()}</div>
-          </div>`).join('')}
-      </div>` : '<div class="p-spacer"></div>'}
       <div class="p-sign"><b>함께한 사람</b>${members.map(m => `<span>${esc(m.name)}</span>`).join('')}</div>
     </div>`;
 }

@@ -389,9 +389,16 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-shared { font-size: 26pt !important; font-weight: 500 !important; color: var(--ink-2); margin-top: 4mm; }
 
 /* 12월까지 실행 계획 (A1 가운데) */
-.p-plan { flex: none; }
+/* 핵심 과제 칸이 남은 높이를 모두 쓰고, 과제마다 아래에 이어진 실행안 카드를 가로로 나열 */
+.p-plan { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.p-acts { display: flex; flex-wrap: wrap; gap: 3mm; margin-top: 3.5mm; }
+.p-act { display: inline-flex; align-items: baseline; gap: 4mm; max-width: 100%; padding: 2.2mm 5mm 2.2mm 4mm; border-left: 2.2mm solid; border-radius: 1.5mm; font-size: var(--act, 30pt); font-weight: 500; line-height: 1.3; letter-spacing: -.3pt; word-break: keep-all; overflow-wrap: anywhere; }
+.p-act > span { min-width: 0; }
+.p-act b { flex: none; font-size: .78em; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.p-etc { margin-top: 7mm; padding-left: 28mm; }
+.p-etc > b { font-size: calc(var(--plan, 54pt) * .56); color: var(--ink-2); }
 .p-plan h2 { font-size: 48pt; font-weight: 900; margin-bottom: 6mm; letter-spacing: -.5pt; }
-.p-plan ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8mm; }
+.p-plan ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7mm; }
 .p-plan li { display: flex; align-items: flex-start; gap: 7mm; }
 .p-plan li > div { min-width: 0; flex: 1; }
 .p-plan li.empty { font-size: 24pt; color: var(--ink-3); }
@@ -414,6 +421,16 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .p-empty { grid-row: 1 / span 2; border: .8mm dashed var(--ink-3); border-radius: 4mm; padding: 8mm; font-size: 24pt; color: var(--ink-3); text-align: center; display: grid; place-items: center; }
 .p-slot { /* 비어 있는 자리: 보이지 않지만 칸 높이를 지킨다 */ }
 .p-sticky.q1 { background: var(--q1); } .p-sticky.q2 { background: var(--q2); } .p-sticky.q3 { background: var(--q3); }
+/* 위에서 아래로 진행 순서: 미션·목표 → 원인 3장(한 줄) → 핵심 과제 → 실행안 8장(4장씩 두 줄)
+   남는 높이는 원인 1줄 : 실행안 2줄 = 1 : 2 로 나눠 포스트잇 한 줄 높이가 비슷하게 */
+.p-sec { --sgap: 6mm; display: flex; flex-direction: column; gap: 4mm; min-height: 0; overflow: hidden; border-top: .6mm dashed var(--ink-3); padding-top: 7mm; }
+.p-sec.q1 { flex: none; }
+.p-sec.q1 .p-stickies { flex: none; height: 40mm; }
+.p-sec.q3 { flex: 2 1 0; }
+.p-sec .p-stickies { flex: 1; min-height: 0; display: grid; gap: var(--sgap); }
+.p-sec.q1 .p-stickies { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+.p-sec.q3 .p-stickies { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.p-sec .p-empty { grid-column: 1 / -1; grid-row: 1 / -1; }
 .p-col.q3 { grid-column: span 2; } /* 3칸을 똑같이 나눠 원인 1칸, 실행안 2칸 → 포스트잇 너비가 모두 같다 */
 .p-col.q3 .p-stickies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .p-col.q3 .p-empty { grid-column: 1 / -1; }
