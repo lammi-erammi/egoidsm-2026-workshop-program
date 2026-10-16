@@ -387,6 +387,8 @@ function openGuide(i) {
   const a = AGENDA[i];
   if (!a) return;
   if (!a.guide) { if (i === 0) openJoinOverlay(); return; }
+  // 접속 QR 화면이 떠 있으면 닫는다 (안 닫으면 안내를 닫았을 때 QR이 다시 보인다)
+  if ($('#joinOverlay')) $('#joinOverlay').hidden = true;
   let ov = $('#guideOverlay');
   if (!ov) {
     ov = document.createElement('div');
@@ -551,7 +553,7 @@ function buildBoard() {
       <div class="paper" data-focus="plan">
         <div class="paper-head">
           <h2>${esc(PLAN.title)}</h2>
-          <p>2번 칸(팀 전략) 포스트잇의 <b>‘⭐ 핵심 과제로’</b>를 누르거나 아래에 직접 적어요. 얼마나·언제까지 <b>숫자를 넣어</b> 적어요 (담당자·마감일·확인할 숫자는 3번 칸 내 실행안에 적어요). <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
+          <p>2번 칸(팀 전략) 포스트잇의 <b>‘⭐ 핵심 과제로’</b>를 누르거나 아래에 직접 적어요. 얼마나·언제까지 <b>숫자를 넣어</b> 적어요 (담당자·마감일·확인할 지표는 3번 칸 내 실행안에 적어요). <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
         </div>
         <div class="pin-count" id="planCount"></div>
         <ol class="plan" id="plan"></ol>
@@ -795,7 +797,7 @@ function noteHtml(n, pinSlot, pinsFull) {
       ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : promoted ? '<span class="pin-badge">⭐ 핵심 과제</span>' : ''}
       ${planTag}
       <div class="note-text">${br(n.text)}</div>
-      ${n.q === 'q3' ? `<div class="note-meta">${actMeta(n) ? esc(actMeta(n)) : '<span class="warn">마감일·확인할 숫자가 없어요 — 고치기로 채워 주세요</span>'}</div>` : ''}
+      ${n.q === 'q3' ? `<div class="note-meta">${actMeta(n) ? esc(actMeta(n)) : '<span class="warn">마감일·확인할 지표가 없어요 — 고치기로 채워 주세요</span>'}</div>` : ''}
       ${pinSlot && pinText !== n.text ? `<div class="pin-text">전지에는: “${esc(pinText)}”</div>` : ''}
       <div class="note-foot">
         <span class="by">${esc(n.name)}</span>
@@ -912,7 +914,7 @@ async function pinNote(note, noteId) {
 }
 
 // ── 12월까지 실행 계획: 팀마다 r1~r20 자리만 있다 (규칙에서도 같은 자리만 허용) ──
-// 한 줄 = 실행안·담당·기한·확인할 숫자. 네 칸이 모두 찬 줄만 쓴다.
+// 한 줄 = 실행안·담당·기한·확인할 지표. 네 칸이 모두 찬 줄만 쓴다.
 // onPoster 가 켜진 줄만 A1 전지에 들어간다 (posterMax 개까지, 넘치면 순서상 앞의 것만)
 const PLAN_SLOTS = Array.from({ length: PLAN.max }, (_, i) => 'r' + (i + 1));
 const isPlan = p => p && PLAN.fields.every(f => typeof p[f.key] === 'string' && p[f.key].trim());
@@ -954,7 +956,7 @@ function planDialog(title, values = {}, fields = PLAN.fields) {
   $('#planTitle').textContent = title;
   // 창 위 안내: 핵심 과제는 과제 이름만, 내 실행안은 세 칸 모두
   if ($('#planNote')) $('#planNote').textContent = fields === PLAN.fields
-    ? '얼마나·언제까지 숫자를 넣어 과제를 적어요. 담당자·마감일·확인할 숫자는 3번 칸 내 실행안에 적어요.'
+    ? '얼마나·언제까지 숫자를 넣어 과제를 적어요. 담당자·마감일·확인할 지표는 3번 칸 내 실행안에 적어요.'
     : `${fields.map(f => f.label).join('·')}을 모두 채워야 저장돼요.`;
   $('#planFields').innerHTML = fields.map(f => `
     <label class="field">${esc(f.label)} <small>${f.max}자까지</small>
@@ -1395,7 +1397,7 @@ async function seedSample() {
     (s.members || []).forEach((name, i) => { up[`${tid}/members/s${i}`] = { name, ts: t0 + i, sample: true }; });
     for (const q of QUESTIONS) {
       const list = s[q.id] || [];
-      // 샘플 한 장 = [글, 공감 수, 쓴 사람(없으면 팀원 중 차례로), (실행안만) 과제 번호, 마감일, 확인할 숫자]
+      // 샘플 한 장 = [글, 공감 수, 쓴 사람(없으면 팀원 중 차례로), (실행안만) 과제 번호, 마감일, 확인할 지표]
       list.forEach(([text, likes = 0, by, , when, metric], i) => {
         const l = {};
         for (let k = 0; k < likes; k++) l['s' + k] = true;
@@ -1415,7 +1417,7 @@ async function seedSample() {
           up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
         });
     }
-    // 핵심 과제도 빈 자리에만. 샘플 한 줄 = [핵심 과제, 담당, 기한, 확인할 숫자]
+    // 핵심 과제도 빈 자리에만. 샘플 한 줄 = [핵심 과제, 담당, 기한, 확인할 지표]
     // n번째 과제는 팀 전략 n번째 아이디어(s_q2_n)에서 올린 것으로 잇는다
     const usedPlan = S.teams[tid]?.plan || {};
     const freePlan = PLAN_SLOTS.filter(k => !kept(`${tid}/plan/${k}`, usedPlan[k]));
@@ -1545,7 +1547,7 @@ document.addEventListener('click', async e => {
     case 'edit': {
       if (!note) return;
       const before = note.text;
-      // 내 실행안은 할 일·마감일·확인할 숫자를 한 창에서 고친다
+      // 내 실행안은 할 일·마감일·확인할 지표를 한 창에서 고친다
       const isAct = note.q === 'q3';
       const v = isAct ? await planDialog('내 실행안 고치기', note, [ACT_TEXT, ...ACT.fields]) : null;
       const text = isAct ? v?.text : await editText('포스트잇 고치기', before);
@@ -1696,7 +1698,7 @@ document.addEventListener('submit', e => {
   const text = input.value.trim();
   if (!text || !S.team) return;
   if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
-  // 내 실행안은 마감일·확인할 숫자까지 적어야 붙는다 (담당자 = 쓴 사람)
+  // 내 실행안은 마감일·확인할 지표까지 적어야 붙는다 (담당자 = 쓴 사람)
   const extra = {};
   if (form.dataset.q === 'q3') {
     for (const f of ACT.fields) {
@@ -1718,6 +1720,8 @@ document.addEventListener('submit', e => {
   }
   store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now(), ...link, ...extra });
   form.querySelectorAll('textarea, input').forEach(x => { x.value = ''; });
+  // 다음 실행안이 엉뚱한 과제에 붙지 않게, 붙이고 나면 과제 선택을 비운다
+  if (form.dataset.q === 'q3' && pickPlan) { pickPlan = null; renderPlanPick(); }
   input.focus();
 });
 
@@ -1725,7 +1729,7 @@ document.addEventListener('submit', e => {
 document.addEventListener('keydown', e => {
   if (e.target.matches('.composer textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
-    // 내 실행안: 마감일·확인할 숫자 칸이 비어 있으면 그 칸으로 넘어간다
+    // 내 실행안: 마감일·확인할 지표 칸이 비어 있으면 그 칸으로 넘어간다
     const empty = [...e.target.form.querySelectorAll('.act-fields input')].find(x => !x.value.trim());
     if (empty) return empty.focus();
     e.target.form.requestSubmit();
