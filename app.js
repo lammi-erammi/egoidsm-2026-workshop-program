@@ -712,7 +712,9 @@ function updateBoard() {
     const list = sortNotes(notes.filter(n => n.q === q.id))
       .map(n => ({ n, slot: pinSlotOf(S.team, q.id, n.id) }))
       .sort((a, b) => (b.slot || isPromoted(S.team, b.n.id) ? 1 : 0) - (a.slot || isPromoted(S.team, a.n.id) ? 1 : 0));
-    $(`#pins-${q.id}`).innerHTML = (max
+    $(`#pins-${q.id}`).innerHTML = (q.fit
+      ? `📌 전지에 붙인 실행안 <b>${pins.length}장</b> <span class="lbl">— 전지에 자리가 남는 동안 더 붙일 수 있어요</span>`
+      : max
       ? `📌 전지에 붙인 포스트잇 <b>${pins.length}/${max}</b>` + (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '')
       : `⭐ 핵심 과제로 올린 아이디어 <b>${list.filter(x => isPromoted(S.team, x.n.id)).length}</b>개 <span class="lbl">— 포스트잇의 '핵심 과제로'를 눌러 아래 '${esc(PLAN.title)}'로 확정해요</span>`)
       + (q.id === 'q3' ? planTallyHtml(S.team, pins) : '');
@@ -772,7 +774,9 @@ function planTallyHtml(teamId, pins) {
   const notes = S.teams[teamId]?.notes || {};
   const cnt = list.map(p => pins.filter(x => linkOf(teamId, notes[x.note])?.plan.id === p.id).length);
   return `<div class="plan-tally"><span class="lbl">과제별 전지 실행안</span>${list.map((p, k) =>
-    `<span class="pt ${cnt[k] ? '' : 'zero'}" style="--c:${PLAN_COLORS[k]}" title="${esc(p.what)}"><i>${k + 1}</i>${cnt[k]}장${cnt[k] ? '' : ' ⚠'}</span>`).join('')}</div>`;
+    `<span class="pt ${cnt[k] ? '' : 'zero'}" style="--c:${PLAN_COLORS[k]}" title="${esc(p.what)}"><i>${k + 1}</i>${cnt[k]}장${cnt[k] ? '' : ' ⚠'}</span>`).join('')}${
+    // 전지 밖 과제·과제 없는 실행안도 세어서 위 'n/8'과 합계가 맞게
+    (() => { const other = pins.length - cnt.reduce((a, b) => a + b, 0); return other > 0 ? `<span class="pt zero" title="전지에 없는 과제와 이어졌거나 과제가 없는 실행안"><i>?</i>과제 밖 ${other}장</span>` : ''; })()}</div>`;
 }
 
 function noteHtml(n, pinSlot, pinsFull) {
@@ -798,7 +802,7 @@ function noteHtml(n, pinSlot, pinsFull) {
         <button class="like ${liked ? 'on' : ''}" data-act="like" title="공감">♥ ${likes || ''}</button>
         ${!max ? '' : pinSlot
           ? `<button class="pin on" data-act="unpin" data-slot="${pinSlot}" title="전지에서 떼기">📌 떼기</button>`
-          : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 칸은 ${max}장이 다 찼어요"` : `title="A1 전지에 붙여요 (이 칸은 ${max}장까지)"`}>📌 전지에 붙이기</button>`}
+          : `<button class="pin" data-act="pin" ${pinsFull ? `disabled title="이 칸은 ${max}장이 다 찼어요"` : `title="A1 전지에 붙여요 (${isFitQ(n.q) ? '전지에 자리가 남는 동안' : `이 칸은 ${max}장까지`})"`}>📌 전지에 붙이기</button>`}
         ${n.q === 'q2' ? `<button class="pin ${promoted ? 'on' : ''}" data-act="promote" title="이 아이디어를 '${esc(PLAN.title)}'로 올려요 (담당자·마감일·숫자를 채워요)">${promoted ? '⭐ 과제에 있음' : '⭐ 핵심 과제로'}</button>` : ''}
         ${mine && n.q === 'q3' ? '<button class="link" data-act="relink" title="위에서 고른 핵심 과제로 바꿔요">과제 바꾸기</button>' : ''}
         ${mine ? '<button class="link" data-act="edit">고치기</button><button class="link" data-act="del">지우기</button>' : ''}
@@ -809,7 +813,25 @@ function noteHtml(n, pinSlot, pinsFull) {
 // ── 전지에 붙일 포스트잇: 질문마다 정해진 장수(pinMax)만큼 p1~p8 자리가 있다 (규칙은 p1~p8 허용) ──
 // 자리에는 포스트잇 id와 전지에 들어갈 글(40자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
 const PIN_LEN = 40;
-const PIN_SLOTS = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'];
+const PIN_SLOTS = Array.from({ length: 20 }, (_, i) => 'p' + (i + 1)); // 규칙도 p1~p20
+const isFitQ = q => !!QUESTIONS.find(x => x.id === q)?.fit;
+
+// 이 포스트잇을 전지에 더 붙여도 실행안 글씨가 줄지 않고 전지가 넘치지 않는지, 화면 밖에 미리 그려 본다
+function posterFitsWith(teamId, q, slot, pin) {
+  const pins = (S.teams[teamId] ||= {}).pins ||= {};
+  const slots = (pins[q] ||= {});
+  const keepNotes = S.posterNotes;
+  slots[slot] = pin; S.posterNotes = true;
+  try {
+    const holder = measuredPoster(teamId);
+    const poster = holder.firstElementChild, plan = poster.querySelector('.p-plan');
+    const ok = parseFloat(poster.style.getPropertyValue('--act')) >= ACT_MAX && (!plan || plan.scrollHeight <= plan.clientHeight + 1);
+    holder.remove();
+    return ok;
+  } finally {
+    delete slots[slot]; S.posterNotes = keepNotes;
+  }
+}
 const pinMaxOf = q => QUESTIONS.find(x => x.id === q)?.pinMax || 0;
 const pinSlotsFor = q => PIN_SLOTS.slice(0, pinMaxOf(q));
 // 자리 하나하나를 '살아 있는 자리'와 '버려진 자리'로 나눈다.
@@ -822,13 +844,15 @@ function pinSlots(teamId, q) {
   const notes = S.teams[teamId]?.notes || {};
   const seen = new Set();
   const live = [], dead = [];
-  const allowed = new Set(pinSlotsFor(q)); // 이 질문에 없는 자리(예: 📌가 없어진 칸의 예전 자리)도 버려진 자리
+  // 자리 이름(p1~p8)과 상관없이 먼저 붙인 순서로 pinMax 장까지 살아 있는 자리
+  // (예: 원인이 4장 → 3장으로 줄었을 때 p4에 붙은 것도 3장 안이면 그대로 센다)
+  const max = pinMaxOf(q);
   PIN_SLOTS
     .map(slot => ({ slot, ...(S.teams[teamId]?.pins?.[q]?.[slot] || {}) }))
     .filter(p => p.ts)
     .sort((a, b) => a.ts - b.ts)
     .forEach(p => {
-      if (allowed.has(p.slot) && p.text && isNote(notes[p.note]) && !seen.has(p.note)) { seen.add(p.note); live.push(p); }
+      if (live.length < max && p.text && isNote(notes[p.note]) && !seen.has(p.note)) { seen.add(p.note); live.push(p); }
       else dead.push(p);
     });
   return { live, dead };
@@ -872,11 +896,16 @@ async function pinNote(note, noteId) {
   if (!S.teams[S.team]?.notes?.[noteId]) return toast('그사이 이 포스트잇이 지워졌어요');
   // 버려진 자리는 먼저 비우고 쓴다
   for (const p of pinSlots(S.team, note.q).dead) await store.remove(`teams/${S.team}/pins/${note.q}/${p.slot}`).catch(() => {});
-  const taken = new Set(pinsOf(S.team, note.q).map(p => p.slot));
-  const slot = pinSlotsFor(note.q).find(k => !taken.has(k));
+  const live = pinsOf(S.team, note.q);
+  const taken = new Set(live.map(p => p.slot));
+  const slot = live.length < pinMaxOf(note.q) && PIN_SLOTS.find(k => !taken.has(k));
   if (!slot) return toast(`이 칸은 전지에 ${pinMaxOf(note.q)}장까지 붙일 수 있어요. 하나를 떼고 붙여 주세요`);
+  const pin = { note: noteId, text, ts: now(), by: uid };
+  if (isFitQ(note.q) && !posterFitsWith(S.team, note.q, slot, pin)) {
+    return toast('전지가 꽉 찼어요. 하나를 떼고 붙여 주세요');
+  }
   try {
-    await store.set(`teams/${S.team}/pins/${note.q}/${slot}`, { note: noteId, text, ts: now(), by: uid });
+    await store.set(`teams/${S.team}/pins/${note.q}/${slot}`, pin);
   } catch {
     toast('방금 다른 사람이 먼저 붙여서 자리가 찼어요. 목록을 보고 다시 해 주세요');
   }
@@ -923,6 +952,10 @@ function renderPlanPick() {
 function planDialog(title, values = {}, fields = PLAN.fields) {
   const d = $('#planDialog');
   $('#planTitle').textContent = title;
+  // 창 위 안내: 핵심 과제는 과제 이름만, 내 실행안은 세 칸 모두
+  if ($('#planNote')) $('#planNote').textContent = fields === PLAN.fields
+    ? '얼마나·언제까지 숫자를 넣어 과제를 적어요. 담당자·마감일·확인할 숫자는 3번 칸 내 실행안에 적어요.'
+    : `${fields.map(f => f.label).join('·')}을 모두 채워야 저장돼요.`;
   $('#planFields').innerHTML = fields.map(f => `
     <label class="field">${esc(f.label)} <small>${f.max}자까지</small>
       <input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}" value="${esc(String(values[f.key] || '').slice(0, f.max))}" required>
@@ -1012,7 +1045,7 @@ function buildPoster() {
         <label><input type="checkbox" id="pNotes" ${S.posterNotes ? 'checked' : ''}> 포스트잇 넣기</label>
         <button class="btn primary" id="pOutline">아웃라인 PDF 저장 (인쇄소용)</button>
         <button class="btn" id="pPrint">인쇄 창으로 보기</button>
-        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 포스트잇은 팀이 📌로 고른 것(${QUESTIONS.filter(q => q.pinMax).map(q => `${esc(q.poster)} ${q.pinMax}장`).join(', ')}까지)만 들어가요. 팀 전략 아이디어는 핵심 과제로 정리돼 전지에는 따로 넣지 않아요.</p>
+        <p class="hint"><b>아웃라인 PDF</b>는 글자를 모두 선으로 바꾼 A1 파일(오프린트미 가이드: 작업 596×842mm, 재단 594×840mm)이라 그대로 인쇄소에 넘기면 돼요. 파일 이름은 <b>경영팀_프로그램_팀이름.pdf</b>. 포스트잇은 팀이 📌로 고른 것(${QUESTIONS.filter(q => q.pinMax).map(q => q.fit ? `${esc(q.poster)}은 글씨가 줄지 않는 만큼` : `${esc(q.poster)} ${q.pinMax}장`).join(', ')})만 들어가요. 팀 전략 아이디어는 핵심 과제로 정리돼 전지에는 따로 넣지 않아요.</p>
       </div>
       <div class="poster-frame" id="pFrame"><div class="poster-scale" id="pScale"></div></div>
     </section>`);
@@ -1371,7 +1404,8 @@ async function seedSample() {
       // 공감 많은 순으로 전지에 붙여 둔다. 이미 찬 자리(사람이 붙인 것)는 건드리지 않고 빈 자리에만
       // (규칙이 찬 자리 덮어쓰기를 막아서, 하나라도 겹치면 샘플 전체가 저장되지 않는다)
       const usedPins = Object.fromEntries(Object.entries(S.teams[tid]?.pins?.[q.id] || {}).filter(([k, v]) => kept(`${tid}/pins/${q.id}/${k}`, v)));
-      const freePins = pinSlotsFor(q.id).filter(k => !usedPins[k]);
+      const room = Math.max(0, pinMaxOf(q.id) - Object.keys(usedPins).length);
+      const freePins = PIN_SLOTS.filter(k => !usedPins[k]).slice(0, room);
       const pinnedNotes = new Set(Object.values(usedPins).map(p => p?.note));
       list.map(([text, likes = 0], i) => ({ text, likes, i, note: `s_${q.id}_${i}` }))
         .filter(p => !pinnedNotes.has(p.note))
