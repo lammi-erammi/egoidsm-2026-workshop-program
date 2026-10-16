@@ -462,6 +462,14 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .note-plan { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ink-2); margin-bottom: 6px; min-width: 0; overflow-wrap: anywhere; }
 .note-plan.none { color: var(--bad); }
 .note-plan.none i { background: var(--bad); }
+.note-plan.off { color: var(--ink-3); }
+/* 2번 칸: 포스트잇 없이 남은 핵심 과제 */
+.orphan-plans { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.orphan-plans .op { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; }
+.orphan-plans .op i { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--c); color: #fff; display: inline-grid; place-items: center; font-style: normal; font-weight: 900; font-size: 12px; }
+.orphan-plans .op span { flex: 1; min-width: 0; }
+/* 팀 화면 맨 아래 '함께한 사람' (핵심 과제 칸이 없어져서 따로) */
+.board > .signers { margin-top: 4px; }
 .plan-tally { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
 .pt { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
 .pt.zero { color: var(--bad); }
