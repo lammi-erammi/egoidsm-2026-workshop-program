@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN, INTRO_MIN } from './config.js';
+import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN, ACT, INTRO_MIN } from './config.js';
 
 // ── 기본 도구 ───────────────────────────────────────────────
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -539,7 +539,10 @@ function buildBoard() {
             <div class="pin-count" id="pins-${q.id}"></div>
             ${q.id === 'q3' ? '<div class="plan-pick" id="planPick"></div>' : ''}
             <form class="composer" data-q="${q.id}">
-              <textarea rows="2" maxlength="500" placeholder="생각을 적고 Enter로 붙이기"></textarea>
+              <textarea rows="2" maxlength="500" placeholder="${q.id === 'q3' ? '내가 할 일을 적어요' : '생각을 적고 Enter로 붙이기'}"></textarea>
+              ${q.id === 'q3' ? `<div class="act-fields">${ACT.fields.map(f => `
+                <label><span>${esc(f.label)}</span><input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}"></label>`).join('')}
+              </div>` : ''}
               <button class="btn primary">붙이기</button>
             </form>
             <div class="notes" id="notes-${q.id}"></div>
@@ -548,7 +551,7 @@ function buildBoard() {
       <div class="paper" data-focus="plan">
         <div class="paper-head">
           <h2>${esc(PLAN.title)}</h2>
-          <p>2번 칸(팀 전략) 포스트잇의 <b>‘⭐ 핵심 과제로’</b>를 누르거나 아래에 직접 적어요. ${PLAN.fields.map(f => f.label).join('·')} <b>네 칸을 모두</b> 채워야 해요. <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
+          <p>2번 칸(팀 전략) 포스트잇의 <b>‘⭐ 핵심 과제로’</b>를 누르거나 아래에 직접 적어요. 얼마나·언제까지 <b>숫자를 넣어</b> 적어요 (담당자·마감일·확인할 숫자는 3번 칸 내 실행안에 적어요). <b>${PLAN.max}개까지</b> 쓸 수 있고, 그중 <b>🖼 ${PLAN.posterMax}개</b>를 골라 A1 전지 가운데에 크게 넣어요.</p>
         </div>
         <div class="pin-count" id="planCount"></div>
         <ol class="plan" id="plan"></ol>
@@ -732,7 +735,6 @@ function updateBoard() {
         <div class="pbody">
           ${on ? '<span class="pin-badge">🖼 전지에 들어감</span>' : ''}
           <div class="pwhat">${esc(p.what)}</div>
-          <div class="pmeta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
         </div>
         <span class="aact">
           ${on
@@ -789,6 +791,7 @@ function noteHtml(n, pinSlot, pinsFull) {
       ${pinSlot ? '<span class="pin-badge">📌 전지에 붙음</span>' : promoted ? '<span class="pin-badge">⭐ 핵심 과제</span>' : ''}
       ${planTag}
       <div class="note-text">${br(n.text)}</div>
+      ${n.q === 'q3' ? `<div class="note-meta">${actMeta(n) ? esc(actMeta(n)) : '<span class="warn">마감일·확인할 숫자가 없어요 — 고치기로 채워 주세요</span>'}</div>` : ''}
       ${pinSlot && pinText !== n.text ? `<div class="pin-text">전지에는: “${esc(pinText)}”</div>` : ''}
       <div class="note-foot">
         <span class="by">${esc(n.name)}</span>
@@ -888,6 +891,10 @@ const plansOf = teamId => listOf(S.teams[teamId]?.plan).filter(isPlan).sort((a, 
 const posterPlansOf = teamId => plansOf(teamId).filter(p => p.onPoster).slice(0, PLAN.posterMax);
 // 전지에 넣은 핵심 과제 1~5번의 색 (전지 가운데 번호 동그라미와 실행안 포스트잇의 번호가 같은 색)
 const PLAN_COLORS = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
+// 내 실행안 고치기 창의 첫 칸 (나머지 칸은 ACT.fields)
+const ACT_TEXT = { key: 'text', label: '내가 할 일', max: 500, hint: '무엇을 할지' };
+// 실행안 아래 작은 줄: 마감일 10/24 · 확인 구성안 3개
+const actMeta = n => ACT.fields.filter(f => n?.[f.key]).map(f => `${f.key === 'metric' ? '확인' : f.label} ${n[f.key]}`).join(' · ');
 
 // ── 내 실행안(q3) ↔ 팀 핵심 과제 ──
 // 실행안 포스트잇에 과제 자리(plan)와 그 과제가 만들어진 시각(planTs)을 같이 적는다.
@@ -912,11 +919,11 @@ function renderPlanPick() {
     : '<div class="lbl">④단계에서 전지에 넣을 핵심 과제(🖼)를 고르면, 여기서 과제를 골라 실행안을 써요</div>';
 }
 
-// 실행 계획 입력 창: 네 칸을 채우면 값, 취소하면 null
-function planDialog(title, values = {}) {
+// 입력 창 (핵심 과제 / 내 실행안 고치기): 모든 칸을 채우면 값, 취소하면 null
+function planDialog(title, values = {}, fields = PLAN.fields) {
   const d = $('#planDialog');
   $('#planTitle').textContent = title;
-  $('#planFields').innerHTML = PLAN.fields.map(f => `
+  $('#planFields').innerHTML = fields.map(f => `
     <label class="field">${esc(f.label)} <small>${f.max}자까지</small>
       <input name="${f.key}" maxlength="${f.max}" placeholder="${esc(f.hint)}" value="${esc(String(values[f.key] || '').slice(0, f.max))}" required>
     </label>`).join('');
@@ -928,8 +935,8 @@ function planDialog(title, values = {}) {
     $('#planForm').onsubmit = e => {
       if (e.submitter?.value !== 'ok') return;
       const v = {};
-      for (const f of PLAN.fields) v[f.key] = $(`#planFields [name=${f.key}]`).value.trim().slice(0, f.max);
-      finish(isPlan(v) ? v : null);
+      for (const f of fields) v[f.key] = $(`#planFields [name=${f.key}]`).value.trim().slice(0, f.max);
+      finish(fields.every(f => v[f.key]) ? v : null);
     };
     d.onclose = () => finish(null);
     d.showModal();
@@ -938,7 +945,7 @@ function planDialog(title, values = {}) {
 }
 
 async function addPlan(values, from) {
-  if (!isPlan(values)) { toast(`${PLAN.fields.map(f => f.label).join('·')} 네 칸을 모두 채워 주세요`); return false; }
+  if (!isPlan(values)) { toast('핵심 과제를 적어 주세요'); return false; }
   const used = S.teams[S.team]?.plan || {};
   const slot = PLAN_SLOTS.find(k => !used[k]);
   if (!slot) { toast(`핵심 과제는 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
@@ -989,7 +996,7 @@ function updateAll() {
         <header><h3>${esc(t.name)}</h3><span class="lbl">접속 ${online}${+t.expected ? ' / ' + t.expected : ''}명</span></header>
         <div class="counts">${QUESTIONS.map((q, i) => `<span class="cnt ${q.id}" title="${esc(q.text)}">${i + 1}. ${notes.filter(n => n.q === q.id).length}장</span>`).join('')}</div>
         <div class="lbl">핵심 과제 ${all.length}개 · 전지에 ${plans.length}개</div>
-        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)} <span class="lbl">· ${esc(p.who)} · ${esc(p.when)}</span></li>`).join('') : '<li class="empty">전지에 넣은 핵심 과제 없음</li>'}</ol>
+        <ol class="mini-plan">${plans.length ? plans.map(p => `<li>${esc(p.what)}</li>`).join('') : '<li class="empty">전지에 넣은 핵심 과제 없음</li>'}</ol>
         <button class="btn sm" data-act="open-team" data-team="${esc(t.id)}">전지 보기</button>
       </article>`;
   }).join('');
@@ -1076,7 +1083,7 @@ function measuredPoster(teamId) {
 // 1) 핵심 과제·실행안 글씨: 핵심 과제 칸에 다 들어가는 가장 큰 크기 (같이 2pt씩 줄인다)
 // 2) 원인 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기
 const PLAN_MAX = 54, PLAN_KEEP = 42, PLAN_MIN = 36, ACT_MAX = 30, ACT_MIN = 18;
-const STICKY_MAX = 36, STICKY_MIN = 20;
+const STICKY_MAX = 44, STICKY_MIN = 20;
 function fitStickies(poster) {
   if (!poster) return;
   // 0) 제목(팀 이름 + 목표 달성 실행 계획)은 한 줄. 팀 이름이 길어 넘칠 때만 줄인다
@@ -1162,7 +1169,7 @@ function actsByPlan(teamId) {
     const key = ln?.num ? ln.plan.id : null;
     if (!map.has(key)) map.set(key, []);
     // 과제 아래에 모이니 앞머리 "[과제 이름]"은 뺀다
-    map.get(key).push({ text: String(pin.text).replace(/^\s*\[[^\]]*\]\s*/, '') || pin.text, name: n?.name || '' });
+    map.get(key).push({ text: String(pin.text).replace(/^\s*\[[^\]]*\]\s*/, '') || pin.text, name: n?.name || '', meta: actMeta(n) });
   }
   return map;
 }
@@ -1173,7 +1180,7 @@ const tint = (hex, a) => {
 };
 function actsHtml(list, color) {
   if (!list?.length) return '';
-  return `<div class="p-acts">${list.map(a => `<span class="p-act" style="border-left-color:${color};background:${tint(color, .12)}"><span>${esc(a.text)}</span>${a.name ? `<b>${esc(a.name)}</b>` : ''}</span>`).join('')}</div>`;
+  return `<div class="p-acts">${list.map(a => `<span class="p-act" style="border-left-color:${color};background:${tint(color, .12)}"><span>${esc(a.text)}${a.meta ? `<small>${esc(a.meta)}</small>` : ''}</span>${a.name ? `<b>${esc(a.name)}</b>` : ''}</span>`).join('')}</div>`;
 }
 
 function posterHtml(teamId) {
@@ -1214,7 +1221,6 @@ function posterHtml(teamId) {
             <li style="--c:${colors[i % colors.length]}">
               <span class="p-n">${i + 1}</span>
               <div><div class="p-what">${esc(p.what)}</div>
-              <div class="p-meta"><span>담당자 <b>${esc(p.who)}</b></span><span>마감일 <b>${esc(p.when)}</b></span><span>확인 <b>${esc(p.metric)}</b></span></div>
               ${S.posterNotes ? actsHtml(acts.get(p.id), colors[i % colors.length]) : ''}</div>
             </li>`).join('') || '<li class="empty">🖼 전지에 넣을 핵심 과제를 골라 주세요</li>'}
         </ol>
@@ -1356,11 +1362,11 @@ async function seedSample() {
     (s.members || []).forEach((name, i) => { up[`${tid}/members/s${i}`] = { name, ts: t0 + i, sample: true }; });
     for (const q of QUESTIONS) {
       const list = s[q.id] || [];
-      // 샘플 한 장 = [글, 공감 수, 쓴 사람(없으면 팀원 중 차례로)]
-      list.forEach(([text, likes = 0, by], i) => {
+      // 샘플 한 장 = [글, 공감 수, 쓴 사람(없으면 팀원 중 차례로), (실행안만) 과제 번호, 마감일, 확인할 숫자]
+      list.forEach(([text, likes = 0, by, , when, metric], i) => {
         const l = {};
         for (let k = 0; k < likes; k++) l['s' + k] = true;
-        up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: by || s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true };
+        up[`${tid}/notes/s_${q.id}_${i}`] = { q: q.id, text, name: by || s.members[(i + 1) % s.members.length], uid: 'sample', ts: t0 + 1000 * i, likes: l, sample: true, ...(when ? { when } : {}), ...(metric ? { metric } : {}) };
       });
       // 공감 많은 순으로 전지에 붙여 둔다. 이미 찬 자리(사람이 붙인 것)는 건드리지 않고 빈 자리에만
       // (규칙이 찬 자리 덮어쓰기를 막아서, 하나라도 겹치면 샘플 전체가 저장되지 않는다)
@@ -1505,10 +1511,14 @@ document.addEventListener('click', async e => {
     case 'edit': {
       if (!note) return;
       const before = note.text;
-      const text = await editText('포스트잇 고치기', before);
-      if (!text || text === before) return;
+      // 내 실행안은 할 일·마감일·확인할 숫자를 한 창에서 고친다
+      const isAct = note.q === 'q3';
+      const v = isAct ? await planDialog('내 실행안 고치기', note, [ACT_TEXT, ...ACT.fields]) : null;
+      const text = isAct ? v?.text : await editText('포스트잇 고치기', before);
+      if (!text || (!isAct && text === before)) return;
       if (!S.teams[S.team]?.notes?.[noteId]) return toast('그사이 이 포스트잇이 지워졌어요');
       const up = { [`notes/${noteId}/text`]: text };
+      if (isAct) for (const f of ACT.fields) up[`notes/${noteId}/${f.key}`] = v[f.key];
       // 전지에 붙어 있고 전지 글이 원래 포스트잇과 같았다면 전지 글도 같이 고친다 (한 번에 저장)
       const slot = pinSlotOf(S.team, note.q, noteId);
       const pin = slot && S.teams[S.team].pins[note.q][slot];
@@ -1648,10 +1658,19 @@ document.addEventListener('submit', e => {
   const form = e.target.closest('.composer');
   if (!form) return;
   e.preventDefault();
-  const input = form.querySelector('textarea, input');
+  const input = form.querySelector('textarea');
   const text = input.value.trim();
   if (!text || !S.team) return;
   if (!canEditTeam()) return toast('다른 팀 전지는 볼 수만 있어요');
+  // 내 실행안은 마감일·확인할 숫자까지 적어야 붙는다 (담당자 = 쓴 사람)
+  const extra = {};
+  if (form.dataset.q === 'q3') {
+    for (const f of ACT.fields) {
+      const el = form.elements[f.key];
+      extra[f.key] = el.value.trim().slice(0, f.max);
+      if (!extra[f.key]) { toast(`${f.label}도 적어 주세요`); el.focus(); return; }
+    }
+  }
   // 내 실행안은 어느 핵심 과제를 위한 일인지 골라야 붙는다 (전지에 넣은 과제가 아직 없으면 그냥 붙인다)
   const link = {};
   if (form.dataset.q === 'q3' && posterPlansOf(S.team).length) {
@@ -1663,8 +1682,8 @@ document.addEventListener('submit', e => {
     }
     Object.assign(link, { plan: pickPlan.id, planTs: pickPlan.ts });
   }
-  store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now(), ...link });
-  input.value = '';
+  store.push(`teams/${S.team}/notes`, { q: form.dataset.q, text, name: me.name || '진행자', uid, ts: now(), ...link, ...extra });
+  form.querySelectorAll('textarea, input').forEach(x => { x.value = ''; });
   input.focus();
 });
 
@@ -1672,6 +1691,9 @@ document.addEventListener('submit', e => {
 document.addEventListener('keydown', e => {
   if (e.target.matches('.composer textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
     e.preventDefault();
+    // 내 실행안: 마감일·확인할 숫자 칸이 비어 있으면 그 칸으로 넘어간다
+    const empty = [...e.target.form.querySelectorAll('.act-fields input')].find(x => !x.value.trim());
+    if (empty) return empty.focus();
     e.target.form.requestSubmit();
   }
 });
