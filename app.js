@@ -1289,6 +1289,12 @@ function buildMissionsEditor() {
           <button class="btn" id="seedSample">샘플 넣기</button>
           <button class="btn ghost" id="clearSample">샘플 지우기</button>
         </div>
+      </div>
+      <div class="ed-block">
+        <h3>접속 기록 <small>A1 전지 '함께한 사람'에 찍히는 이름</small></h3>
+        <p class="sub">리허설·시험으로 들어왔던 이름을 지워요. 포스트잇·핵심 과제는 그대로 남고, 샘플 이름은 '샘플 지우기'로 따로 지워요. 지금 화면을 열어 둔 사람은 다시 열면 이름이 다시 올라가요.</p>
+        <p class="sub" id="memberList"></p>
+        <div class="row-btns"><button class="btn ghost" id="clearMembers">접속 기록 지우기</button></div>
       </div>` : ''}
     </section>`;
   if (S.meta) shell(body); else app.innerHTML = `<main id="main">${body}</main>`;
@@ -1297,6 +1303,11 @@ function buildMissionsEditor() {
   if (S.meta) {
     $('#seedSample').onclick = seedSample;
     $('#clearSample').onclick = clearSample;
+    $('#clearMembers').onclick = clearMembers;
+    const names = realMembers();
+    $('#memberList').textContent = names.length
+      ? `지금 기록 ${names.length}명: ${names.map(m => `${teamOf(m.tid)?.name || m.tid} ${m.name}`).join(', ')}`
+      : '지금 남아 있는 접속 기록이 없어요.';
   }
   $('#teamRows').onclick = e => { if (e.target.dataset.act === 'row-del' && confirm('이 팀을 목록에서 뺄까요? (이미 적은 포스트잇은 저장소에 남아요)')) e.target.closest('.trow').remove(); };
   $('#saveMeta').onclick = async () => {
@@ -1432,6 +1443,19 @@ async function clearSample() {
   const up = sampleCleanup(Object.keys(S.teams));
   if (!Object.keys(up).length) return toast('지울 샘플이 없어요');
   if (await save(store.update('teams', up))) toast('샘플을 지웠어요');
+}
+
+// 사람이 들어와서 남은 접속 기록(샘플 이름 제외) — 전지 '함께한 사람'에 찍히는 이름
+const realMembers = () => Object.entries(S.teams || {}).flatMap(([tid, d]) =>
+  Object.entries(d?.members || {}).filter(([, m]) => m && !m.sample).map(([id, m]) => ({ tid, id, name: m.name })));
+
+async function clearMembers() {
+  const list = realMembers();
+  if (!list.length) return toast('지울 접속 기록이 없어요');
+  if (!confirm(`접속 기록 ${list.length}명을 지울까요?\n${list.map(m => `${teamOf(m.tid)?.name || m.tid} ${m.name}`).join(', ')}\n\n포스트잇·핵심 과제는 그대로 남아요.`)) return;
+  const up = {};
+  for (const m of list) up[`${m.tid}/members/${m.id}`] = null;
+  if (await save(store.update('teams', up))) { toast('접속 기록을 지웠어요'); buildMissionsEditor(); }
 }
 
 // 팀들의 샘플 흔적을 지우는 경로 묶음 { 'gulgang/notes/s_q1_0': null, … }
