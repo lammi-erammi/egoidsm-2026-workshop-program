@@ -14,6 +14,9 @@ const saved = {
 const hash = new URLSearchParams(location.hash.slice(1));
 const PREVIEW = !(FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL);
 const CODE = hash.get('k') || (PREVIEW ? 'preview' : '');
+// #k=…&qr=1 로 열면(행사 화면의 QR 을 진행자가 누름) 진행자 로그인 상태일 때 접속 안내 창을 바로 띄운다.
+// 참가자 QR 에는 qr=1 이 없어서 참가자는 평소처럼 들어온다. 띄운 뒤 주소에서 qr=1 을 지워 새로고침 때 다시 안 뜨게 한다.
+let openQrOnAdmin = hash.get('qr') === '1';
 
 let uid = saved.get('ws-uid');
 if (!uid) { uid = 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); saved.set('ws-uid', uid); }
@@ -77,6 +80,11 @@ async function main() {
     if (!admin && S.view === 'missions') S.view = 'board';
     S.built = '';
     render();
+    if (admin && openQrOnAdmin) {
+      openQrOnAdmin = false;
+      try { history.replaceState(null, '', `${location.pathname}${location.search}#k=${CODE}`); } catch {}
+      openJoinOverlay();
+    }
   });
   store.onServerOffset(v => { S.offset = v; });
   store.onConnection(v => { S.online = v; renderHeader(); if (v) announce(); });
