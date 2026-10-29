@@ -636,15 +636,31 @@ function mustWinLine(teamId, cls = '') {
   return `<div class="must-win ${cls}">${cls ? '' : '🔥 '}12월 말 필사즉생 목표 <b>${v ? `월 ${fmtEok(v)}` : '정하는 중'}</b></div>`;
 }
 // 2번 칸(팀 전략): 필사즉생 목표와 지금까지 월 평균의 차이
+// ── 최근 월 평균 (대표님 10/29 요청: 2번 칸은 연초부터 평균 대신 최근 3개월 평균으로) ──
+// meta.recentAvg.company = 회사(운영부서·그로스·CEO실도 같이), meta.recentAvg[팀 id] = 브랜드처럼 퀘스트가 따로 있는 팀
+// meta.recentLabel = 기간(예: '7~9월'), meta.recentLabels[팀 id] = 그 팀만 기간이 다를 때(예: 퓌라 '8~9월')
+function recentOf(teamId) {
+  const ra = S.meta?.recentAvg || {};
+  const own = !!(teamId && S.meta?.quests?.[teamId]);
+  const key = teamId && ra[teamId] != null && ra[teamId] !== '' ? teamId : (own ? null : 'company');
+  const v = key ? +ra[key] : NaN;
+  if (!(v >= 0) || ra[key] === '' || ra[key] == null) return null;
+  return { avg: v, label: S.meta?.recentLabels?.[key] || S.meta?.recentLabel || '최근 3개월' };
+}
+
+// 2번 칸(팀 전략): 필사즉생 목표와 최근 월 평균의 차이 (최근 값이 없으면 연초부터 평균)
 function mustWinGapHtml(teamId, cls = '') {
   const v = mustWinOf(teamId);
   if (!v) return `<div class="gap-box ${cls}"><div><span>12월 말 필사즉생 목표</span><b>정하는 중</b></div></div>`;
-  const mo = monthlyOf(teamId);
-  const more = mo ? v - mo.avg : null;
+  const rc = recentOf(teamId);
+  const mo = rc ? null : monthlyOf(teamId);
+  const avg = rc ? rc.avg : mo?.avg;
+  const avgLabel = rc ? `최근 월 평균 (${esc(rc.label)})` : mo ? `지금까지 월 평균 (${mo.months}개월)` : '';
+  const more = avg != null ? v - avg : null;
   return `
     <div class="gap-box ${cls}">
       <div><span>12월 말 필사즉생 목표</span><b class="bad">월 ${fmtEok(v)}</b></div>
-      ${mo ? `<div><span>지금까지 월 평균 (${mo.months}개월)</span><b>${fmtEok(mo.avg)}</b></div>
+      ${avg != null ? `<div><span>${avgLabel}</span><b>${fmtEok(avg)}</b></div>
       <div><span>목표까지</span><b class="${more > 0 ? 'bad' : 'good'}">${more > 0 ? `월 ${fmtEok(more)} 더` : '이미 넘었어요'}</b></div>` : ''}
     </div>`;
 }
@@ -1271,6 +1287,8 @@ function buildMissionsEditor() {
           <label class="field">달성 (억)<input id="qcActual" type="number" step="0.1" min="0" value="${esc(m.quests?.company?.actual ?? '')}"></label>
           <label class="field">기준 (예: 9월)<input id="qAsOf" value="${esc(m.questAsOf || '')}" placeholder="9월"></label>
           <label class="field">🔥 12월 말 필사즉생 월 매출 (억)<input id="mwCompany" type="number" step="0.1" min="0" value="${esc(m.mustWin?.company ?? '')}"></label>
+          <label class="field">최근 월 평균 (억, 2번 칸)<input id="rcCompany" type="number" step="0.01" min="0" value="${esc(m.recentAvg?.company ?? '')}"></label>
+          <label class="field">최근 월 평균 기간 (예: 7~9월)<input id="rcLabel" value="${esc(m.recentLabel || '')}" placeholder="7~9월"></label>
         </div>
         <p class="sub">회사 목표는 운영부서·그로스·CEO실 팀에도 같이 쓰여요. 브랜드처럼 따로 목표가 있는 팀은 아래 팀 줄에 적어요. 매달 손익이 나오면 숫자만 고치고 저장하면 돼요.</p>
         <label class="field">워크샵 전체 참가 인원 (접속 현황 'n / 전체'에 쓰여요)<input id="cExpected" type="number" min="0" value="${esc(m.expected ?? '')}"></label>
@@ -1322,7 +1340,8 @@ function buildMissionsEditor() {
     const teams = {};
     const quests = {};
     const num = el => (el.value.trim() === '' ? null : +el.value);
-    const mustWin = {};
+    const mustWin = {}, recentAvg = {}, recentLabels = {};
+    if (num($('#rcCompany')) != null) recentAvg.company = num($('#rcCompany'));
     if (num($('#qcTarget'))) quests.company = { target: num($('#qcTarget')), actual: num($('#qcActual')) || 0 };
     if (num($('#mwCompany'))) mustWin.company = num($('#mwCompany'));
     app.querySelectorAll('.trow').forEach((r, i) => {
@@ -1339,6 +1358,10 @@ function buildMissionsEditor() {
       if (target) quests[r.dataset.id] = { target, actual: num($('.tqActual', r)) || 0 };
       const mw = num($('.tMustWin', r));
       if (mw) mustWin[r.dataset.id] = mw;
+      const rc = num($('.tRecent', r));
+      if (rc != null) recentAvg[r.dataset.id] = rc;
+      const rl = $('.tRecentLabel', r).value.trim();
+      if (rl) recentLabels[r.dataset.id] = rl;
     });
     const ok = await save(store.set('meta', {
       expected: +$('#cExpected').value || 0,
@@ -1346,6 +1369,7 @@ function buildMissionsEditor() {
       questAsOf: $('#qAsOf').value.trim(),
       quests,
       mustWin,
+      recentAvg, recentLabel: $('#rcLabel').value.trim(), recentLabels,
       company: { name: $('#cName').value.trim(), mission: $('#cMission').value.trim() },
       teams
     }));
@@ -1502,6 +1526,8 @@ function teamRow(t) {
         <label class="tExp">팀 퀘스트 목표 <input class="tqTarget" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.target ?? '')}">억</label>
         <label class="tExp">달성 <input class="tqActual" type="number" step="0.1" min="0" value="${esc(S.meta?.quests?.[t.id]?.actual ?? '')}">억</label>
         <label class="tExp">🔥 필사즉생 월 <input class="tMustWin" type="number" step="0.1" min="0" value="${esc(S.meta?.mustWin?.[t.id] ?? '')}">억</label>
+        <label class="tExp">최근 월 평균 <input class="tRecent" type="number" step="0.01" min="0" value="${esc(S.meta?.recentAvg?.[t.id] ?? '')}">억</label>
+        <label class="tExp">기간 <input class="tRecentLabel" value="${esc(S.meta?.recentLabels?.[t.id] || '')}" placeholder="회사와 같음"></label>
         <span class="lbl">퀘스트를 비우면 회사 목표·필사즉생과 같아요. 퀘스트가 따로 있는 팀은 필사즉생도 따로 적어요</span>
       </div>
       <button class="link" data-act="row-del">빼기</button>
