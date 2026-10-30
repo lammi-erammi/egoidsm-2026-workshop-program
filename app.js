@@ -1262,11 +1262,13 @@ function posterSection(teamId, qid, num) {
       const n = notes[pins[k].note], ln = qid === 'q3' ? linkOf(teamId, n) : null;
       const foot = qid === 'q3'
         ? `<em>${ln?.num ? `<i style="--c:${ln.color}">${ln.num}</i>` : '<i class="none"></i>'}<b>${esc(n?.name || '')}</b></em>` : '';
-      return `<div class="p-sticky ${qid}"><span>${br(pins[k].text)}</span>${foot}</div>`;
+      // 원인마다 번호 ①②③ (10/30 피드백) — 이모지·특수 글자 대신 동그라미를 직접 그려 PDF에도 나오게
+      const no = qid === 'q1' ? `<i class="p-no">${k + 1}</i>` : '';
+      return `<div class="p-sticky ${qid}"><span>${no}${br(pins[k].text)}</span>${foot}</div>`;
     }).join('');
   return `
     <div class="p-sec ${qid}">
-      <div class="p-q"><span>${num}</span>${esc(q.poster || q.short)}</div>
+      <div class="p-q">${esc(q.poster || q.short)}</div>
       <div class="p-stickies">${body}</div>
     </div>`;
 }

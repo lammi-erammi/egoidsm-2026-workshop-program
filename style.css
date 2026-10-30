@@ -437,6 +437,10 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
    남는 높이는 원인 1줄 : 실행안 2줄 = 1 : 2 로 나눠 포스트잇 한 줄 높이가 비슷하게 */
 .p-sec { --sgap: 6mm; display: flex; flex-direction: column; gap: 4mm; min-height: 0; overflow: hidden; border-top: .6mm dashed var(--ink-3); padding-top: 7mm; }
 .p-sec.q1 { flex: none; }
+/* 전지 '원인' 제목은 '12월까지 팀 핵심 과제' 제목과 같은 크기·굵기 (10/30 피드백) */
+.p-sec .p-q { font-size: 48pt; font-weight: 900; }
+/* 원인 포스트잇 앞 번호 동그라미 */
+.p-no { display: inline-grid; place-items: center; width: 1.25em; height: 1.25em; margin-right: .3em; vertical-align: .08em; border-radius: 50%; background: var(--ink); color: #fff; font-style: normal; font-weight: 900; font-size: .75em; line-height: 1; }
 .p-sec.q1 .p-stickies { flex: none; max-height: 58mm; } /* 높이는 가장 긴 원인 글 길이만큼, 58mm를 넘으면 글씨를 줄인다 */
 .p-sec.q3 { flex: 2 1 0; }
 .p-sec .p-stickies { flex: 1; min-height: 0; display: grid; gap: var(--sgap); }
