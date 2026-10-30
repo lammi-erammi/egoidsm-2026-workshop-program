@@ -89,8 +89,8 @@ async function main() {
   store.onServerOffset(v => { S.offset = v; });
   store.onConnection(v => { S.online = v; renderHeader(); if (v) announce(); });
   store.on('meta', v => { S.meta = v; if (!v && PREVIEW) seedPreview(); render(); }, denied);
-  store.on('teams', v => { S.teams = v || {}; render(); }, denied);
-  store.on('presence', v => { S.presence = v || {}; renderHeader(); render(); renderJoinOverlay(); }, denied);
+  store.on('teams', v => { S.teams = v || {}; liveRender(); }, denied);
+  store.on('presence', v => { S.presence = v || {}; renderHeader(); liveRender(); renderJoinOverlay(); }, denied);
   store.on('stage', v => { S.stage = v; renderHeader(); markFocus(); }, denied);
   setInterval(tick, 1000);
 }
@@ -111,6 +111,59 @@ function announce() {
   if (!store || !me.name || !me.team) return;
   store.presence(`presence/${me.team}/${uid}`, { name: me.name }).catch(() => {});
   save(store.set(`teams/${me.team}/members/${uid}`, { name: me.name, ts: now() }));
+}
+
+// ── 다른 사람이 쓴 내용 반영 ─────────────────────────────────
+// 마우스·손가락을 누르고 있는 동안에는 화면을 다시 그리지 않는다.
+// (누르는 사이 버튼이 새로 그려지면 클릭이 씹혀서 '고치기'·'붙이기'가 안 눌리던 문제, 10/30)
+// 손을 떼고 클릭이 끝난 다음에 한 번에 반영한다.
+// 손을 뗀 신호를 놓쳐도(창 밖에서 뗌 등) 3초 넘게 누른 상태면 그냥 반영한다.
+let pressing = false, pressAt = 0, pendingRender = false;
+function liveRender() {
+  if (pressing && Date.now() - pressAt < 3000) { pendingRender = true; return; }
+  render();
+}
+document.addEventListener('pointerdown', () => { pressing = true; pressAt = Date.now(); }, true);
+window.addEventListener('blur', () => releasePress());
+const releasePress = () => {
+  pressing = false;
+  if (!pendingRender) return;
+  pendingRender = false;
+  setTimeout(render, 0); // click 이벤트가 먼저 처리되게
+};
+document.addEventListener('pointerup', releasePress, true);
+document.addEventListener('pointercancel', releasePress, true);
+
+// 같은 내용이면 다시 그리지 않는다 (다른 사람이 쓸 때 화면이 깜빡이지 않게)
+function setHtml(el, html) {
+  if (!el || el._html === html) return;
+  el._html = html;
+  el.innerHTML = html;
+}
+// 포스트잇 목록: 바뀐 포스트잇만 바꿔 끼우고, 그대로인 포스트잇은 손대지 않는다
+// items = [{ id, html }] (html 의 맨 바깥 요소에 data-id)
+function patchList(box, items, empty) {
+  if (!box) return;
+  if (!items.length) return setHtml(box, empty);
+  if (box._html != null) { box.innerHTML = ''; box._html = null; }
+  const old = new Map([...box.children].map(el => [el.dataset.id, el]));
+  let prev = null;
+  for (const { id, html } of items) {
+    let el = old.get(id);
+    old.delete(id);
+    if (!el || el._html !== html) {
+      const t = document.createElement('template');
+      t.innerHTML = html.trim();
+      const fresh = t.content.firstElementChild;
+      fresh._html = html;
+      if (el) el.replaceWith(fresh);
+      el = fresh;
+    }
+    const want = prev ? prev.nextElementSibling : box.firstElementChild;
+    if (want !== el) box.insertBefore(el, want);
+    prev = el;
+  }
+  old.forEach(el => el.remove());
 }
 
 // ── 화면 전환 ───────────────────────────────────────────────
@@ -532,6 +585,7 @@ function buildJoin() {
 
 // ── 팀 전지 ─────────────────────────────────────────────────
 function buildBoard() {
+  for (const q of QUESTIONS) delete noteOrder[S.team + ':' + q.id]; // 전지를 새로 열 때는 공감 순으로
   shell(`
     <div class="board-wrap">
     <section class="board ${canEditTeam() ? '' : 'readonly'}">
@@ -570,21 +624,27 @@ function buildBoard() {
     </aside>
     </div>`);
   updateBoard();
-  document.fonts?.ready.then(() => { if (S.built.startsWith('board:')) renderLivePreview(); });
+  document.fonts?.ready.then(() => { if (S.built.startsWith('board:')) renderLivePreview(true); });
 }
 
 // 팀 전지 오른쪽 미리보기: A1 전지를 줄여서 그대로 보여 준다
-function renderLivePreview() {
+// 내용이 그대로면(접속한 사람만 바뀐 경우 등) 다시 그리지 않고 크기만 맞춘다 — 글씨 맞추기가 무거워서 입력이 끊기던 문제(10/30)
+function renderLivePreview(force = false) {
   const box = $('#lpScale'), frame = $('#lpFrame');
   if (!box || !frame) return;
-  box.innerHTML = posterHtml(S.team);
+  const html = posterHtml(S.team);
+  if (force || box._html !== html || !box.firstElementChild) {
+    box._html = html;
+    box.innerHTML = html;
+    fitStickies(box.firstElementChild);
+  }
   const poster = box.firstElementChild;
-  fitStickies(poster);
   const scale = frame.clientWidth / poster.offsetWidth;
   box.style.transform = `scale(${scale})`;
   frame.style.height = poster.offsetHeight * scale + 'px';
 }
 
+const noteOrder = {}; // 팀:칸 → 화면에 보이는 포스트잇 순서 (updateBoard 참고)
 const sortNotes = arr => arr.sort((a, b) => Object.keys(b.likes || {}).length - Object.keys(a.likes || {}).length || a.ts - b.ts);
 
 // ── 목표 = 2026 팀퀘스트 (미션 편집에서 숫자를 고친다) ──
@@ -709,12 +769,12 @@ function updateBoard() {
   $('#boardName').textContent = team.name;
 
   const online = listOf(S.presence[S.team]);
-  $('#online').innerHTML = `<span class="lbl">지금 접속 ${online.length}명</span>` +
-    online.map(p => `<span class="chip ${p.id === uid ? 'me' : ''}">${esc(p.name)}</span>`).join('');
+  setHtml($('#online'), `<span class="lbl">지금 접속 ${online.length}명</span>` +
+    online.map(p => `<span class="chip ${p.id === uid ? 'me' : ''}">${esc(p.name)}</span>`).join(''));
 
-  $('#missions').innerHTML = companyCard(c) + teamCard(team);
-  if ($('#gapBox-q1')) $('#gapBox-q1').innerHTML = monthlyHtml(S.team);
-  if ($('#gapBox-q2')) $('#gapBox-q2').innerHTML = mustWinGapHtml(S.team);
+  setHtml($('#missions'), companyCard(c) + teamCard(team));
+  setHtml($('#gapBox-q1'), monthlyHtml(S.team));
+  setHtml($('#gapBox-q2'), mustWinGapHtml(S.team));
 
   const notes = notesOf(S.team);
   for (const q of QUESTIONS) {
@@ -725,24 +785,34 @@ function updateBoard() {
     // 2번 칸은 핵심 과제로 올린 것이 맨 위 (과제 순서대로 → 전지 번호 1~5와 같은 차례)
     const planRank = new Map(plansOf(S.team).map((p, i) => [p.from, i]));
     const rank = x => x.slot ? -1 : planRank.has(x.n.id) ? planRank.get(x.n.id) : Infinity;
-    const list = sortNotes(notes.filter(n => n.q === q.id))
+    const byRank = (a, b) => (rank(a) === rank(b) ? 0 : rank(a) < rank(b) ? -1 : 1);
+    let list = sortNotes(notes.filter(n => n.q === q.id))
       .map(n => ({ n, slot: pinSlotOf(S.team, q.id, n.id) }))
-      .sort((a, b) => (rank(a) === rank(b) ? 0 : rank(a) < rank(b) ? -1 : 1));
-    $(`#pins-${q.id}`).innerHTML = (q.fit
+      .sort(byRank);
+    // 공감 순 정렬은 처음 그릴 때만. 그 뒤로는 있던 포스트잇이 제자리를 지키고 새 포스트잇은 같은 묶음 맨 아래에 붙는다
+    // (다른 사람이 공감을 누를 때마다 순서가 바뀌어 누르려던 포스트잇이 움직이던 문제, 10/30). '↻ 공감 순'을 누르면 다시 정렬
+    const orderKey = S.team + ':' + q.id, before = noteOrder[orderKey];
+    if (before) {
+      const pos = new Map(before.map((id, i) => [id, i]));
+      const at = (x, i) => pos.has(x.n.id) ? pos.get(x.n.id) : before.length + i;
+      list = list.map((x, i) => ({ x, i })).sort((a, b) => byRank(a.x, b.x) || at(a.x, a.i) - at(b.x, b.i)).map(o => o.x);
+    }
+    noteOrder[orderKey] = list.map(x => x.n.id);
+    const resort = list.length > 1 ? ` <button class="link resort" data-act="resort" data-q="${q.id}" title="공감 많은 순서로 다시 정렬해요">↻ 공감 순</button>` : '';
+    setHtml($(`#pins-${q.id}`), (q.fit
       ? `📌 전지에 붙인 실행안 <b>${pins.length}장</b> <span class="lbl">— 전지에 자리가 남는 동안 더 붙일 수 있어요</span>`
       : max
       ? `📌 전지에 붙인 포스트잇 <b>${pins.length}/${max}</b>` + (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '')
       : `⭐ 핵심 과제 <b>${plansOf(S.team).length}</b>개 · 🖼 전지에 넣은 과제 <b>${posterPlansOf(S.team).length}/${posterPlansOf(S.team).length > PLAN.posterPick ? PLAN.posterMax : PLAN.posterPick}</b> <span class="lbl">— 포스트잇의 '⭐ 핵심 과제로'를 누르고, 🖼로 전지에 넣을 ${PLAN.posterPick}개를 골라요 (꼭 필요하면 ${PLAN.posterMax}개까지)</span>` + orphanPlansHtml(S.team))
-      + (q.id === 'q3' ? planTallyHtml(S.team, pins) : '');
-    $(`#notes-${q.id}`).innerHTML = list.length
-      ? list.map(({ n, slot }) => noteHtml(n, slot, full)).join('')
-      : '<p class="empty">아직 붙은 포스트잇이 없어요</p>';
+      + resort + (q.id === 'q3' ? planTallyHtml(S.team, pins) : ''));
+    patchList($(`#notes-${q.id}`), list.map(({ n, slot }) => ({ id: n.id, html: noteHtml(n, slot, full) })),
+      '<p class="empty">아직 붙은 포스트잇이 없어요</p>');
   }
 
   const members = membersOf(S.team);
-  $('#signers').innerHTML = members.length
+  setHtml($('#signers'), members.length
     ? `<span class="lbl">함께한 사람</span>${members.map(m => `<span class="sign">${esc(m.name)}</span>`).join('')}`
-    : '';
+    : '');
 
   renderPlanPick();
   renderLivePreview();
@@ -949,10 +1019,10 @@ function renderPlanPick() {
   if (!box) return;
   const list = posterPlansOf(S.team);
   if (pickPlan && !list.some(p => p.id === pickPlan.id && p.ts === pickPlan.ts)) pickPlan = null;
-  box.innerHTML = list.length
+  setHtml(box, list.length
     ? `<div class="lbl">어느 핵심 과제를 위한 일인가요? 먼저 고르고 써요</div>
        <div class="pp-list">${list.map((p, k) => `<button type="button" class="pp ${pickPlan?.id === p.id ? 'on' : ''}" data-act="pick-plan" data-id="${esc(p.id)}" style="--c:${PLAN_COLORS[k]}"><i>${k + 1}</i><span>${esc(p.what)}</span></button>`).join('')}</div>`
-    : '<div class="lbl">④단계에서 전지에 넣을 핵심 과제(🖼)를 고르면, 여기서 과제를 골라 실행안을 써요</div>';
+    : '<div class="lbl">④단계에서 전지에 넣을 핵심 과제(🖼)를 고르면, 여기서 과제를 골라 실행안을 써요</div>');
 }
 
 // 입력 창 (핵심 과제 / 내 실행안 고치기): 모든 칸을 채우면 값, 취소하면 null
@@ -1561,6 +1631,7 @@ document.addEventListener('click', async e => {
     case 'login': return openLogin();
     case 'logout': return store.signOut();
     case 'open-team': return go('board', el.dataset.team);
+    case 'resort': delete noteOrder[S.team + ':' + el.dataset.q]; return updateBoard();
 
     // 포스트잇을 누르는 사이 다른 사람이 지웠을 수 있다 → 지워진 포스트잇에는 아무것도 쓰지 않는다
     case 'like':

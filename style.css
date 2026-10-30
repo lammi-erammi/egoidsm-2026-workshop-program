@@ -208,6 +208,7 @@ main { padding: 24px; max-width: 1760px; margin: 0 auto; }
 /* 전지에 붙일 포스트잇 (📌) */
 .pin-count { font-size: 13px; color: var(--ink-2); background: var(--bg); border-radius: 8px; padding: 6px 10px; }
 .pin-count b { color: var(--ink); }
+.pin-count .resort { font-size: 12px; margin-left: 4px; }
 .note.pinned { outline: 3px solid var(--ink); }
 .pin-badge { display: inline-block; font-size: 11px; font-weight: 700; background: var(--ink); color: #fff; border-radius: 99px; padding: 1px 8px; margin-bottom: 4px; }
 .pin-text { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
