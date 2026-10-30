@@ -665,12 +665,13 @@ function mustWinGapHtml(teamId, cls = '') {
     </div>`;
 }
 
-function questHtml(q, cls = '', name = '2026 팀 퀘스트') {
+// side: 목표 줄 오른쪽 끝에 붙일 것 (전지에서는 필사즉생 목표를 여기 두어 미션 박스 높이를 줄인다)
+function questHtml(q, cls = '', name = '2026 팀 퀘스트', side = '') {
   if (!q) return '';
   const asOf = S.meta?.questAsOf ? `${esc(S.meta.questAsOf)}까지` : '지금까지';
   return `
     <div class="quest ${cls}">
-      <div class="q-line"><b>${fmtEok(q.target)}</b><span>${name} 매출 목표</span></div>
+      <div class="q-line"><b>${fmtEok(q.target)}</b><span>${name} 매출 목표</span>${side}</div>
       <div class="q-bar"><i style="width:${Math.min(100, q.rate).toFixed(1)}%"></i></div>
       <div class="q-now">${asOf} <b>${fmtEok(q.actual)}</b> · 달성률 <b>${q.rate.toFixed(1)}%</b> · 남은 <b>${fmtEok(q.left)}</b></div>
     </div>`;
@@ -731,7 +732,7 @@ function updateBoard() {
       ? `📌 전지에 붙인 실행안 <b>${pins.length}장</b> <span class="lbl">— 전지에 자리가 남는 동안 더 붙일 수 있어요</span>`
       : max
       ? `📌 전지에 붙인 포스트잇 <b>${pins.length}/${max}</b>` + (full ? ' <span class="lbl">— 바꾸려면 하나를 떼어 주세요</span>' : '')
-      : `⭐ 핵심 과제 <b>${plansOf(S.team).length}</b>개 · 🖼 전지에 넣은 과제 <b>${posterPlansOf(S.team).length}/${PLAN.posterMax}</b> <span class="lbl">— 포스트잇의 '⭐ 핵심 과제로'를 누르고, 🖼로 전지에 넣을 ${PLAN.posterMax}개를 골라요</span>` + orphanPlansHtml(S.team))
+      : `⭐ 핵심 과제 <b>${plansOf(S.team).length}</b>개 · 🖼 전지에 넣은 과제 <b>${posterPlansOf(S.team).length}/${posterPlansOf(S.team).length > PLAN.posterPick ? PLAN.posterMax : PLAN.posterPick}</b> <span class="lbl">— 포스트잇의 '⭐ 핵심 과제로'를 누르고, 🖼로 전지에 넣을 ${PLAN.posterPick}개를 골라요 (꼭 필요하면 ${PLAN.posterMax}개까지)</span>` + orphanPlansHtml(S.team))
       + (q.id === 'q3' ? planTallyHtml(S.team, pins) : '');
     $(`#notes-${q.id}`).innerHTML = list.length
       ? list.map(({ n, slot }) => noteHtml(n, slot, full)).join('')
@@ -925,7 +926,7 @@ const isPlan = p => p && PLAN.fields.every(f => typeof p[f.key] === 'string' && 
 const plansOf = teamId => listOf(S.teams[teamId]?.plan).filter(isPlan).sort((a, b) => (a.order ?? a.ts) - (b.order ?? b.ts));
 const posterPlansOf = teamId => plansOf(teamId).filter(p => p.onPoster).slice(0, PLAN.posterMax);
 // 전지에 넣은 핵심 과제 1~5번의 색 (전지 가운데 번호 동그라미와 실행안 포스트잇의 번호가 같은 색)
-const PLAN_COLORS = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed'];
+const PLAN_COLORS = ['#ff6b4a', '#2f7de1', '#16a37a', '#c2410c', '#7c3aed', '#db2777'];
 // 내 실행안 고치기 창의 첫 칸 (나머지 칸은 ACT.fields)
 const ACT_TEXT = { key: 'text', label: '내가 할 일', max: 500, hint: '무엇을 할지' };
 // 실행안 아래 작은 줄: 마감일 10/24 · 확인 구성안 3개
@@ -990,7 +991,7 @@ async function addPlan(values, from) {
   if (!slot) { toast(`핵심 과제는 ${PLAN.max}개까지예요. 하나를 고치거나 지워 주세요`); return false; }
   const ts = now();
   // 전지 자리가 남아 있으면 처음부터 전지에 넣어 둔다 (나중에 🖼로 빼거나 바꿀 수 있다)
-  const onPoster = posterPlansOf(S.team).length < PLAN.posterMax;
+  const onPoster = posterPlansOf(S.team).length < PLAN.posterPick; // 저절로는 5개까지, 6번째는 팀이 🖼로 직접
   try {
     await store.set(`teams/${S.team}/plan/${slot}`, { ...values, onPoster, name: me.name || '진행자', uid, ts, order: ts, ...(from ? { from } : {}) });
     return true;
@@ -1121,8 +1122,9 @@ function measuredPoster(teamId) {
 
 // 1) 핵심 과제·실행안 글씨: 핵심 과제 칸에 다 들어가는 가장 큰 크기 (같이 2pt씩 줄인다)
 // 2) 원인 포스트잇 글씨: 칸 안에 다 들어가는 가장 큰 크기
-const PLAN_MAX = 54, PLAN_KEEP = 42, PLAN_MIN = 36, ACT_MAX = 30, ACT_MIN = 18;
-const STICKY_MAX = 44, STICKY_MIN = 20;
+const PLAN_MAX = 46 /* 10/30 54 → 46 (본인) */, PLAN_KEEP = 42, PLAN_MIN = 36, ACT_MAX = 30, ACT_MIN = 18;
+// 원인 포스트잇은 28pt까지만 (10/30 퓌라 의견: 핵심 과제 자리를 넓히려고 44 → 28)
+const STICKY_MAX = 28, STICKY_MIN = 20;
 function fitStickies(poster) {
   if (!poster) return;
   // 0) 제목(팀 이름 + 목표 달성 실행 계획)은 한 줄. 팀 이름이 길어 넘칠 때만 줄인다
@@ -1240,16 +1242,17 @@ function posterHtml(teamId) {
           ${questHtml(cq, 'p-quest', '2026 전사 퀘스트')}
         </div>
         <div class="p-m">
-          ${t.deptMission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
-          ${t.mission ? `<b>${esc(t.name)}의 미션</b><p class="${t.deptMission ? 'mid' : ''}">${br(t.mission)}</p>` : ''}
+          ${t.deptMission && t.mission ? `<div class="p-dept">${esc(t.dept || '부서')}의 미션 <b>${esc(t.deptMission)}</b></div>` : ''}
+          ${t.deptMission && !t.mission ? `<b>${esc(t.dept || '부서')}의 미션</b><p>${br(t.deptMission)}</p>` : ''}
+          ${t.mission ? `<b>${esc(t.name)}의 미션</b><p>${br(t.mission)}</p>` : ''}
           ${!t.deptMission && !t.mission ? `<b>${esc(t.name)}의 미션</b><p class="sm">(미션을 정하는 중이에요)</p>` : ''}
-          ${questHtml(tq, 'p-quest', '2026 팀 퀘스트')}
+          ${questHtml(tq, 'p-quest', '2026 팀 퀘스트', mustWinLine(teamId, 'p-must'))}
           ${(() => {
             // 원인 분석용 월 평균은 포스트잇 칸 대신 팀 퀘스트 아래에 한 줄로 (포스트잇 칸 높이를 맞추려고)
             const mo = monthlyOf(teamId);
             return mo ? `<div class="p-avg"><span>지금까지 월 평균 <b class="${mo.avg < mo.need ? 'bad' : 'good'}">${fmtEok(mo.avg)}</b></span><span>달성하려면 필요했던 월 평균 <b>${fmtEok(mo.need)}</b></span></div>` : '';
           })()}
-          ${mustWinLine(teamId, 'p-must')}
+          ${tq ? '' : mustWinLine(teamId, 'p-must')}
         </div>
       </div>
       ${S.posterNotes ? posterSection(teamId, 'q1', 1) : ''}
@@ -1444,7 +1447,7 @@ async function seedSample() {
     // n번째 과제는 팀 전략 n번째 아이디어(s_q2_n)에서 올린 것으로 잇는다
     const usedPlan = S.teams[tid]?.plan || {};
     const freePlan = PLAN_SLOTS.filter(k => !kept(`${tid}/plan/${k}`, usedPlan[k]));
-    let posterRoom = PLAN.posterMax - posterPlansOf(tid).filter(p => !(`${tid}/plan/${p.id}` in old)).length;
+    let posterRoom = PLAN.posterPick -posterPlansOf(tid).filter(p => !(`${tid}/plan/${p.id}` in old)).length;
     (s.plan || []).slice(0, freePlan.length).forEach((row, i) => {
       const v = {};
       PLAN.fields.forEach((f, k) => { v[f.key] = String(row[k] || '').slice(0, f.max); });

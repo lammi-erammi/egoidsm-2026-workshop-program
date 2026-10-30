@@ -368,24 +368,25 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 
 /* ── A1 전지 ── */
 /* 오프린트미 A1 세로 가이드(Poster_A1_Portrait): 작업 596×842mm(재단 여백 사방 1mm), 재단 594×840mm,
-   안전 영역 = 작업 영역 기준 51mm 안쪽. 글자·상자는 안전 영역에서 2mm 더 안쪽(53mm)에 둔다. 배경은 끝까지 채운다. */
-.poster { width: 596mm; height: 842mm; background: #fffdf8; color: var(--ink); padding: 53mm; display: flex; flex-direction: column; gap: 10mm; font-family: var(--sans); overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+   안전 영역 = 작업 영역 기준 51mm 안쪽. 글자·상자는 안전 영역에서 2mm 더 안쪽(53mm)에 둔다. 배경은 끝까지 채운다.
+   예외(10/30 본인 요청): 아래쪽만 35mm — '함께한 사람' 줄을 아래로 내려 핵심 과제 칸을 넓혔다(다른 포스터에서 35mm까지 인쇄된 것 확인, 본인) */
+.poster { width: 596mm; height: 842mm; background: #fffdf8; color: var(--ink); padding: 53mm 53mm 35mm; display: flex; flex-direction: column; gap: 10mm; font-family: var(--sans); overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .p-top { display: flex; justify-content: space-between; font-size: 30pt; color: var(--ink-2); font-weight: 700; border-bottom: 1.2mm solid var(--ink); padding-bottom: 6mm; }
 .p-title { font-size: var(--title, 96pt); font-weight: 900; letter-spacing: -3pt; line-height: 1.05; white-space: nowrap; overflow: hidden; margin-bottom: 5mm; } /* 미션 박스와의 간격 10+5=15mm */
 .p-team { color: var(--accent); margin-right: .3em; } /* 팀 이름과 제목을 한 줄, 같은 크기로 */
 .p-missions { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; }
-.p-m { border: 1mm solid var(--ink); border-radius: 6mm; padding: 7mm 9mm; }
+.p-m { border: 1mm solid var(--ink); border-radius: 6mm; padding: 6mm 8mm; }
 .p-m:nth-child(2) { border-color: var(--accent); }
 .p-m > b { display: block; font-size: 24pt; color: var(--ink-2); margin-bottom: 2mm; }
-.p-m p { font-size: 34pt; font-weight: 700; line-height: 1.25; letter-spacing: -.5pt; margin-bottom: 4mm; word-break: keep-all; overflow-wrap: anywhere; }
+.p-m p { font-size: 32pt; font-weight: 700; line-height: 1.125; letter-spacing: -.5pt; margin-bottom: 3mm; word-break: keep-all; overflow-wrap: anywhere; }
 .p-m p.sm { font-size: 32pt; font-weight: 500; }
 /* 팀퀘스트 (A1) */
 .p-quest { margin-top: 2mm; padding-top: 4mm; border-top: .6mm dashed var(--ink-3); }
 .p-quest .q-line { gap: 4mm; }
-.p-quest .q-line b { font-size: 50pt; letter-spacing: -1pt; }
+.p-quest .q-line b { font-size: 44pt; letter-spacing: -1pt; white-space: nowrap; }
 .p-quest .q-line span { font-size: 20pt; color: var(--ink-2); }
 .p-quest .q-bar { height: 6mm; margin: 3mm 0; }
-.p-quest .q-now { font-size: 21pt; }
+.p-quest .q-now { font-size: 21pt; line-height: 1.25; } /* 줄 간격 반으로 (10/30) */
 .p-shared { font-size: 26pt !important; font-weight: 500 !important; color: var(--ink-2); margin-top: 4mm; }
 
 /* 12월까지 실행 계획 (A1 가운데) */
@@ -435,7 +436,7 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
    남는 높이는 원인 1줄 : 실행안 2줄 = 1 : 2 로 나눠 포스트잇 한 줄 높이가 비슷하게 */
 .p-sec { --sgap: 6mm; display: flex; flex-direction: column; gap: 4mm; min-height: 0; overflow: hidden; border-top: .6mm dashed var(--ink-3); padding-top: 7mm; }
 .p-sec.q1 { flex: none; }
-.p-sec.q1 .p-stickies { flex: none; height: 58mm; }
+.p-sec.q1 .p-stickies { flex: none; max-height: 58mm; } /* 높이는 가장 긴 원인 글 길이만큼, 58mm를 넘으면 글씨를 줄인다 */
 .p-sec.q3 { flex: 2 1 0; }
 .p-sec .p-stickies { flex: 1; min-height: 0; display: grid; gap: var(--sgap); }
 .p-sec.q1 .p-stickies { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
@@ -478,8 +479,16 @@ dialog::backdrop { background: rgba(31, 29, 26, .35); }
 .must-win b { font-size: 18px; font-weight: 900; }
 .p-must { margin-top: 4mm; padding: 3.5mm 6mm; border-radius: 4mm; font-size: 24pt; gap: 1mm 4mm; }
 .p-must b { font-size: 40pt; }
+/* 팀 퀘스트 목표 줄 오른쪽 끝의 작은 필사즉생 목표 (미션 박스 높이를 줄이려고 따로 줄을 두지 않는다) */
+.p-quest .q-line { flex-wrap: nowrap; }
+.p-quest .q-line > span { white-space: nowrap; }
+.p-quest .q-line .p-must { margin: 0 0 0 auto; align-self: center; flex-direction: column; align-items: flex-start; flex-wrap: nowrap; gap: .5mm; padding: 2mm 4.5mm; border-radius: 3mm; font-size: 15pt; color: #b42318; white-space: nowrap; }
+.p-quest .q-line .p-must b { font-size: 28pt; letter-spacing: 0; line-height: 1.1; color: #b42318; }
+/* 팀 미션이 따로 있으면 부서 미션은 위에 한 줄로 작게 (미션 박스 높이를 줄이려고) */
+.p-dept { font-size: 21pt; color: var(--ink-2); margin-bottom: 3mm; word-break: keep-all; }
+.p-dept b { color: var(--ink); font-weight: 700; margin-left: 2mm; }
 /* 전지: 원인 분석용 월 평균 (팀 퀘스트 아래 한 줄) */
-.p-avg { display: flex; flex-wrap: wrap; gap: 1mm 8mm; font-size: 21pt; color: var(--ink-2); margin-top: 2mm; }
+.p-avg { display: flex; flex-wrap: wrap; gap: 1mm 8mm; font-size: 21pt; line-height: 1.25; color: var(--ink-2); margin-top: 1mm; }
 .p-avg b { color: var(--ink); }
 .p-avg b.bad { color: var(--bad); }
 .p-avg b.good { color: var(--ok); }

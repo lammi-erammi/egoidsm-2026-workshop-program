@@ -137,10 +137,12 @@ export const QUESTIONS = [
 // 5) '12월까지 팀 핵심 과제' (2번 칸에서 확정. A1 전지 가운데에 크게 들어간다)
 //    대표님 최종 피드백(10/15): 담당자·마감일·확인할 지표는 과제가 아니라 개인 실행안(ACT)에 적는다
 //    max = 팀마다 쓸 수 있는 줄 수, posterMax = 그중 A1 전지에 넣을 수 있는 줄 수(이보다 많으면 전지가 넘친다)
+//    posterPick = 안내하는 기본 개수(5개). 꼭 필요한 팀은 posterMax(6개)까지 넣을 수 있다 (10/30 퓌라 의견)
 export const PLAN = {
   title: '12월까지 팀 핵심 과제',
   max: 20,
-  posterMax: 5,
+  posterPick: 5,
+  posterMax: 6,
   fields: [
     { key: 'what', label: '핵심 과제', max: 40, hint: '숫자가 들어간 과제 (예: 반복 업무 3개 자동화로 월 20시간 확보)' }
   ]
