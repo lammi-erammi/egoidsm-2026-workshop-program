@@ -888,8 +888,9 @@ function noteHtml(n, pinSlot, pinsFull) {
 }
 
 // ── 전지에 붙일 포스트잇: 질문마다 정해진 장수(pinMax)만큼 p1~p8 자리가 있다 (규칙은 p1~p8 허용) ──
-// 자리에는 포스트잇 id와 전지에 들어갈 글(40자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
-const PIN_LEN = 40;
+// 자리에는 포스트잇 id와 전지에 들어갈 글(원인 40자, 실행안 60자까지)을 따로 담는다. 원래 포스트잇은 그대로 둔다.
+// 실행안 60자는 11/3 본인 요청 (database.rules.json 의 pins 규칙도 같이)
+const pinLen = q => q === 'q3' ? 60 : 40;
 const PIN_SLOTS = Array.from({ length: 20 }, (_, i) => 'p' + (i + 1)); // 규칙도 p1~p20
 const isFitQ = q => !!QUESTIONS.find(x => x.id === q)?.fit;
 
@@ -964,10 +965,11 @@ function membersOf(teamId) {
 async function pinNote(note, noteId) {
   if (pinSlotOf(S.team, note.q, noteId)) return toast('이미 전지에 붙어 있어요');
   let text = note.text;
-  if (text.length > PIN_LEN) {
-    const short = await editText(`전지에는 ${PIN_LEN}자까지 들어가요. 전지에 넣을 글로 줄여 주세요 (원래 포스트잇은 그대로예요)`, text, PIN_LEN);
+  const max = pinLen(note.q);
+  if (text.length > max) {
+    const short = await editText(`전지에는 ${max}자까지 들어가요. 전지에 넣을 글로 줄여 주세요 (원래 포스트잇은 그대로예요)`, text, max);
     if (!short) return;
-    if (short.length > PIN_LEN) return toast(`${PIN_LEN}자를 넘었어요 (${short.length}자)`);
+    if (short.length > max) return toast(`${max}자를 넘었어요 (${short.length}자)`);
     text = short;
   }
   if (!S.teams[S.team]?.notes?.[noteId]) return toast('그사이 이 포스트잇이 지워졌어요');
@@ -1512,7 +1514,7 @@ async function seedSample() {
         .sort((a, b) => b.likes - a.likes)
         .slice(0, freePins.length)
         .forEach((p, k) => {
-          up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, PIN_LEN), ts: t0 + k, by: 'sample', sample: true };
+          up[`${tid}/pins/${q.id}/${freePins[k]}`] = { note: p.note, text: p.text.slice(0, pinLen(q.id)), ts: t0 + k, by: 'sample', sample: true };
         });
     }
     // 핵심 과제도 빈 자리에만. 샘플 한 줄 = [핵심 과제, 담당, 기한, 확인할 지표]
@@ -1673,8 +1675,8 @@ document.addEventListener('click', async e => {
       const slot = pinSlotOf(S.team, note.q, noteId);
       const pin = slot && S.teams[S.team].pins[note.q][slot];
       if (pin && pin.text === before) {
-        if (text.length <= PIN_LEN) up[`pins/${note.q}/${slot}/text`] = text;
-        else toast(`전지에는 ${PIN_LEN}자까지라 전지에 붙은 글은 그대로예요. 바꾸려면 떼고 다시 붙여 주세요`);
+        if (text.length <= pinLen(note.q)) up[`pins/${note.q}/${slot}/text`] = text;
+        else toast(`전지에는 ${pinLen(note.q)}자까지라 전지에 붙은 글은 그대로예요. 바꾸려면 떼고 다시 붙여 주세요`);
       }
       return save(store.update(teamPath, up));
     }
