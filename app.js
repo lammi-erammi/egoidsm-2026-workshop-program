@@ -895,15 +895,26 @@ const PIN_SLOTS = Array.from({ length: 20 }, (_, i) => 'p' + (i + 1)); // 규칙
 const isFitQ = q => !!QUESTIONS.find(x => x.id === q)?.fit;
 
 // 이 포스트잇을 전지에 더 붙여도 실행안 글씨가 줄지 않고 전지가 넘치지 않는지, 화면 밖에 미리 그려 본다
+// '줄지 않는다' = 30pt 이상이거나, 지금 전지의 실행안 글씨보다 작아지지 않음
+// (11/3 경영팀: 이미 26pt로 맞춰진 전지는 아래가 비어 있어도 30pt 기준에 걸려 한 장도 더 못 붙이던 문제)
+const actSizeOf = teamId => {
+  const holder = measuredPoster(teamId);
+  const v = parseFloat(holder.firstElementChild.style.getPropertyValue('--act')) || ACT_MAX;
+  holder.remove();
+  return v;
+};
 function posterFitsWith(teamId, q, slot, pin) {
   const pins = (S.teams[teamId] ||= {}).pins ||= {};
   const slots = (pins[q] ||= {});
   const keepNotes = S.posterNotes;
-  slots[slot] = pin; S.posterNotes = true;
+  S.posterNotes = true;
   try {
+    const now = actSizeOf(teamId);
+    slots[slot] = pin;
     const holder = measuredPoster(teamId);
     const poster = holder.firstElementChild, plan = poster.querySelector('.p-plan');
-    const ok = parseFloat(poster.style.getPropertyValue('--act')) >= ACT_MAX && (!plan || plan.scrollHeight <= plan.clientHeight + 1);
+    const act = parseFloat(poster.style.getPropertyValue('--act'));
+    const ok = act >= Math.min(ACT_MAX, now) && (!plan || plan.scrollHeight <= plan.clientHeight + 1);
     holder.remove();
     return ok;
   } finally {
