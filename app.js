@@ -1,5 +1,5 @@
 import { createStore } from './store.js';
-import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN, ACT, INTRO_MIN } from './config.js';
+import { FIREBASE_CONFIG, EVENT, AGENDA, QUESTIONS, PLAN, ACT, INTRO_MIN, LEADERS } from './config.js';
 
 // ── 기본 도구 ───────────────────────────────────────────────
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -965,12 +965,15 @@ function cleanupDeadPins(teamId) {
 // 포스트잇이 핵심 과제로 올라가 있는지는 과제 쪽을 보고 판단한다 (과제를 지우면 다시 올릴 수 있게)
 const isPromoted = (teamId, noteId) => plansOf(teamId).some(p => p.from === noteId);
 
-// 같은 사람이 핸드폰·노트북 두 곳에서 들어와도 이름은 한 번만
+// 같은 사람이 핸드폰·노트북 두 곳에서 들어와도 이름은 한 번만. 리더(config LEADERS)는 맨 앞, 나머지는 들어온 순서
 function membersOf(teamId) {
   const seen = new Set();
+  const leaders = [].concat(LEADERS?.[teamId] || []);
+  const rank = m => { const i = leaders.indexOf(m.name.trim()); return i < 0 ? leaders.length : i; };
   return listOf(S.teams[teamId]?.members)
     .sort((a, b) => a.ts - b.ts)
-    .filter(m => m.name && !seen.has(m.name.trim()) && seen.add(m.name.trim()));
+    .filter(m => m.name && !seen.has(m.name.trim()) && seen.add(m.name.trim()))
+    .sort((a, b) => rank(a) - rank(b));
 }
 
 async function pinNote(note, noteId) {

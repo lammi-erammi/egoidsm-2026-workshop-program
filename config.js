@@ -148,6 +148,14 @@ export const PLAN = {
   ]
 };
 
+// 5-1) 팀 리더. '함께한 사람'에서 리더 이름을 맨 앞에 둔다 (11/4 본인). 키 = 팀 id, 값 = 이름 (여러 명이면 배열)
+//      리더가 따로 없는 팀은 적지 않는다 → 들어온 순서 그대로
+export const LEADERS = {
+  mgmt: '박정균', order: '박정균', purchase: '김동현', gulgang: '지수민',
+  huug: '최다영', growth: '김지훈', ceostaff: '윤창건',
+  feura: '윤창건', vasol: '윤창건', mnms: '윤창건'
+};
+
 // 6) 내 실행안(3번 칸)에 함께 적는 칸. 담당자는 쓴 사람 이름이 그대로 들어간다
 export const ACT = {
   fields: [
