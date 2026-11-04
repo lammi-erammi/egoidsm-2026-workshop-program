@@ -13,6 +13,34 @@ const FONT_FILES = {
   poorstory: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poorstory/PoorStory-Regular.ttf'
 };
 
+// 중국어 간체(个 등)는 Pretendard 에 없어서 Noto Sans SC 로 그린다 (11/4 구매팀). 화면도 style.css 에서 같은 글꼴로 받는다.
+// 글꼴 전체는 너무 커서, 글자 범위별로 나뉜 조각 중 전지에 실제로 나온 글자가 든 조각(woff)만 받는다
+const CJK_VER = '5.2.9';
+const CJK_CSS = w => `https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@${CJK_VER}/${w}.css`;
+const CJK_WEIGHT = { sans400: 400, sans500: 500, sans700: 700, sans900: 900, poorstory: 400 };
+const cjkCache = new Map(); // 'woff 주소' → 글꼴
+
+async function loadCjk(opentype, weight, chars) {
+  const css = await (await fetch(CJK_CSS(weight))).text();
+  const base = CJK_CSS(weight).replace(/[^/]+$/, '');
+  const parts = [];
+  for (const block of css.split('@font-face').slice(1)) {
+    const file = block.match(/url\(\.\/([^)]+\.woff)\)/)?.[1];
+    const ranges = block.match(/unicode-range:\s*([^;]+)/)?.[1];
+    if (!file || !ranges) continue;
+    const spans = ranges.split(',').map(r => r.trim().replace(/^U\+/i, '').split('-').map(h => parseInt(h, 16)));
+    if (chars.some(c => spans.some(([a, b = a]) => c >= a && c <= b))) parts.push(base + file);
+  }
+  return Promise.all(parts.map(async url => {
+    if (!cjkCache.has(url)) {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('중국어 글꼴을 받지 못함');
+      cjkCache.set(url, opentype.parse(await res.arrayBuffer()));
+    }
+    return cjkCache.get(url);
+  }));
+}
+
 let fontsLoading = null;
 function loadFonts() {
   if (!fontsLoading) {
@@ -24,18 +52,19 @@ function loadFonts() {
         if (!res.ok) throw new Error(`글꼴을 받지 못함: ${key}`);
         return [key, opentype.parse(await res.arrayBuffer())];
       }));
-      return Object.fromEntries(list);
+      return Object.assign(Object.fromEntries(list), { opentype });
     })();
     fontsLoading.catch(() => { fontsLoading = null; });
   }
   return fontsLoading;
 }
 
-function pickFont(fonts, cs) {
-  if (/Poor Story/i.test(cs.fontFamily)) return fonts.poorstory;
+function fontKey(cs) {
+  if (/Poor Story/i.test(cs.fontFamily)) return 'poorstory';
   const w = parseInt(cs.fontWeight, 10) || 400;
-  return w >= 800 ? fonts.sans900 : w >= 650 ? fonts.sans700 : w >= 450 ? fonts.sans500 : fonts.sans400;
+  return w >= 800 ? 'sans900' : w >= 650 ? 'sans700' : w >= 450 ? 'sans500' : 'sans400';
 }
+const hasGlyph = (f, ch) => f.charToGlyph(ch)?.index > 0;
 
 // 글자 상자 맨 위에서 기준선까지의 거리 (글자 크기 대비 비율). 글꼴마다 한 번 재서 기억한다.
 const baselineCache = new Map();
@@ -110,6 +139,22 @@ export async function outlinePdf(posterEl, onStep = () => {}) {
   onStep('글꼴 받는 중… (처음 한 번은 10초쯤)');
   const fonts = await loadFonts();
   await document.fonts.ready;
+
+  // 기본 글꼴에 없는 글자(중국어 간체 등)를 굵기별로 모아, 그 글자가 든 Noto Sans SC 조각만 받는다
+  const need = {};
+  const walker = document.createTreeWalker(posterEl, NodeFilter.SHOW_TEXT);
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+    const key = fontKey(getComputedStyle(t.parentElement));
+    for (const ch of t.data) {
+      if (/\s/.test(ch) || hasGlyph(fonts[key], ch) || hasGlyph(fonts.sans500, ch) || hasGlyph(fonts.poorstory, ch)) continue;
+      (need[CJK_WEIGHT[key]] ||= new Set()).add(ch.codePointAt(0));
+    }
+  }
+  const cjk = {};
+  if (Object.keys(need).length) {
+    onStep('중국어 글꼴 받는 중…');
+    for (const [w, set] of Object.entries(need)) cjk[w] = await loadCjk(fonts.opentype, w, [...set]);
+  }
   onStep('글자를 선으로 바꾸는 중…');
 
   const origin = posterEl.getBoundingClientRect();
@@ -155,7 +200,9 @@ export async function outlinePdf(posterEl, onStep = () => {}) {
   function drawText(node, cs) {
     const color = rgb(cs.color);
     if (!color) return;
-    const font = pickFont(fonts, cs);
+    const key = fontKey(cs);
+    const font = fonts[key];
+    const backups = [fonts.sans500, fonts.poorstory, ...(cjk[CJK_WEIGHT[key]] || [])];
     const size = px(cs.fontSize);
     const base = baselineRatio(cs) * size;
     ops.push(`${color} rg`);
@@ -171,7 +218,7 @@ export async function outlinePdf(posterEl, onStep = () => {}) {
         if (r && r.width) {
           let f = font, glyph = font.charToGlyph(ch);
           if (!glyph || glyph.index === 0) {
-            f = [fonts.sans500, fonts.poorstory].find(o => o.charToGlyph(ch)?.index > 0) || font;
+            f = backups.find(o => hasGlyph(o, ch)) || font;
             glyph = f.charToGlyph(ch);
             if (!glyph || glyph.index === 0) missing++;
           }

@@ -16,9 +16,9 @@
   --q3: #cdf0dd;
   --radius: 14px;
   --shadow: 0 1px 2px rgba(31, 29, 26, .06), 0 4px 14px rgba(31, 29, 26, .06);
-  --hand: 'Poor Story', cursive; /* '함께한 사람' 이름만 손글씨 (outline-pdf.js 글꼴 파일과 같아야 함) */
+  --hand: 'Poor Story', 'Noto Sans SC', cursive; /* '함께한 사람' 이름만 손글씨 (outline-pdf.js 글꼴 파일과 같아야 함) */
   /* 아웃라인 PDF(outline-pdf.js)가 같은 글꼴 파일로 글자를 그리므로 바꿀 때는 둘 다 바꾼다 */
-  --sans: 'Pretendard', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  --sans: 'Pretendard', 'Noto Sans SC', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
 }
 
 * { box-sizing: border-box; }
